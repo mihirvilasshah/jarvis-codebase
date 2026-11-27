@@ -178,6 +178,7 @@ Deployment checks already performed:
 api/chat.py            Vercel serverless handler (POST /api/chat)
 notes/                 30 Markdown notes in 6 folders
 viewer/index.html      single-page 3D viewer + chat UI
+viewer/favicon.svg     site icon, with favicon.ico and touch PNG fallbacks
 viewer/graph-data.js   generated browser graph data
 viewer/graph.json      generated server-side graph data
 brain.py               config, retrieval, prompt, FreeLLMAPI, history

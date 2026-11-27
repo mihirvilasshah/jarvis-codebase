@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Northwind Knowledge Galaxy">
+  <defs>
+    <radialGradient id="sky" cx="50%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#12223d"/>
+      <stop offset="0.62" stop-color="#070d18"/>
+      <stop offset="1" stop-color="#04060a"/>
+    </radialGradient>
+    <linearGradient id="disk" x1="10" y1="44" x2="54" y2="20" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67e8f9"/>
+      <stop offset="0.5" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#e8f2ff"/>
+      <stop offset="0.35" stop-color="#67e8f9"/>
+      <stop offset="1" stop-color="#67e8f9" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="15" fill="url(#sky)"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.5" fill="none" stroke="#67e8f9" stroke-opacity="0.18"/>
+
+  <g transform="rotate(-30 32 32)">
+    <ellipse cx="32" cy="32" rx="23" ry="9.5" fill="none" stroke="url(#disk)" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
+    <ellipse cx="32" cy="32" rx="14" ry="5.2" fill="none" stroke="#67e8f9" stroke-width="1.1" opacity="0.45"/>
+  </g>
+
+  <circle cx="32" cy="32" r="13" fill="url(#core)" opacity="0.55"/>
+
+  <path d="M32 21C32.9 27.7 36.3 31.1 43 32C36.3 32.9 32.9 36.3 32 43C31.1 36.3 27.7 32.9 21 32C27.7 31.1 31.1 27.7 32 21Z" fill="#eaf7ff"/>
+
+  <circle cx="50" cy="17" r="2.2" fill="#fbbf24"/>
+  <circle cx="13.5" cy="46" r="1.9" fill="#5eead4"/>
+  <circle cx="48" cy="48" r="1.5" fill="#f472b6"/>
+</svg>
