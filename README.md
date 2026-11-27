@@ -168,6 +168,35 @@ Deployment checks already performed:
   points at localhost; no key or internal detail leaks.
 - `/config.json` returns 404 on both local and Vercel; no key literal appears in HTML/JS.
 
+## The Bay - REA website observation
+
+Jarvis can observe public websites with [REA](https://github.com/morluto/rea)
+(MIT, npm `rea-agents`). It is installed **outside** this project, pinned, and
+invoked by absolute path so a server started without your shell `PATH` still finds it.
+
+Exact install commands used, after confirming
+`npm view rea-agents repository.url` returned `git+https://github.com/morluto/rea.git`:
+
+```powershell
+$dir = Join-Path $env:USERPROFILE '.jarvis-tools\rea'
+New-Item -ItemType Directory -Path $dir -Force
+Set-Location $dir
+npm init -y
+npm install rea-agents@6.10.1 --save-exact --ignore-scripts
+```
+
+`teardown.py` is standard-library only and soft-imported, so Jarvis boots even
+if it is absent. `GET /teardown/diag` reports readiness, installed and pinned
+versions, Node version, Chrome discovery, and plain-English problems. `POST
+/teardown` with `{"url": "https://..."}` (or the chat tag `[TEARDOWN:https://...]`)
+observes one website through `capture-browser-scenario` using a fixed `goto` +
+`wait` scenario. Missing pieces produce one in-character line saying what to install.
+
+**The law:** REA observes only. The scenario never clicks, types, logs in, or
+changes anything, and the URL gate refuses non-http(s), local/private/loopback
+addresses, embedded credentials, and interactive commands. Only public websites
+you may look at are accepted.
+
 ## Preflight (live end-to-end check)
 
 Run this before calling any change done:
@@ -207,6 +236,7 @@ viewer/graph.json      generated server-side graph data
 brain.py               config, retrieval, prompt, FreeLLMAPI, history
 build.py               standard-library indexer
 server.py              local 127.0.0.1:4700 server
+teardown.py            read-only REA website observation bay (soft-imported)
 preflight.py           live end-to-end harness (exit non-zero on failure)
 config.example.json    config template (safe to commit)
 config.json            your local secrets (gitignored)

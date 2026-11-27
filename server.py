@@ -22,6 +22,11 @@ from urllib.parse import unquote, urlparse
 import brain
 import build
 
+try:
+    import teardown
+except Exception:  # THE BAY is optional; Jarvis still boots without it.
+    teardown = None
+
 # =============================================================================
 # PERSONA - the entire character lives in this block.
 #
@@ -92,6 +97,10 @@ CONTROL_TAGS = {
         "help": "use when asked to re-index or refresh the knowledge graph from disk",
         "run": "_tag_index",
     },
+    "TEARDOWN": {
+        "help": "observe one public website read-only with REA; pass the http(s) URL",
+        "run": "_tag_teardown",
+    },
 }
 
 NO_NOTES_REPLY = (
@@ -124,6 +133,18 @@ def _tag_count(_arg: str) -> tuple[bool, str]:
 def _tag_index(_arg: str) -> tuple[bool, str]:
     notes = brain.reload_graph()
     return True, "Re-indexed, sir: %d notes on file." % len(notes)
+
+
+def _tag_teardown(arg: str) -> tuple[bool, str]:
+    if teardown is None:
+        return (
+            False,
+            "I'm afraid the teardown bay isn't fitted, sir. Install teardown.py and "
+            "REA 6.10.1; nothing was touched.",
+        )
+    result = teardown.run_teardown(arg)
+    reply = str(result.get("reply") or "The teardown bay is not ready, sir. Nothing was touched.")
+    return bool(result.get("ok")), reply
 
 
 def run_control_tag(name: str, arg: str | None) -> tuple[bool, str]:
@@ -365,7 +386,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -385,6 +406,23 @@ class Handler(SimpleHTTPRequestHandler):
                 },
             )
             return
+        if path == "/teardown/diag":
+            if teardown is None:
+                self._json(
+                    200,
+                    {
+                        "ready": False,
+                        "installed_version": None,
+                        "pinned_version": None,
+                        "expected_version": "6.10.1",
+                        "node": {"path": None, "version": None, "ok": False, "need": "22.23.4+"},
+                        "chrome": {"path": None, "found": False},
+                        "problems": ["teardown.py is missing from the project."],
+                    },
+                )
+            else:
+                self._json(200, teardown.diagnose())
+            return
         if path == "/":
             self.path = "/index.html"
         # Decode and normalise before the safety check so encoded traversal
@@ -401,7 +439,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -436,6 +474,21 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/teardown":
+            if teardown is None:
+                self._json(
+                    200,
+                    {
+                        "ok": False,
+                        "reply": "I'm afraid the teardown bay isn't fitted, sir. Install teardown.py and REA 6.10.1; nothing was touched.",
+                    },
+                )
+                return
+            value = payload.get("url", payload.get("question", payload.get("text")))
+            result = teardown.run_teardown(value, payload.get("command"))
+            self._json(200, result)
             return
 
         if path == "/reindex":

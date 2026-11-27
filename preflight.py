@@ -1001,6 +1001,100 @@ def check_mute(ctx: Context) -> Outcome:
         shutil.rmtree(profile, ignore_errors=True)
 
 
+def check_teardown_diag(ctx: Context) -> Outcome:
+    status, _, body = request(
+        ctx.base_url + "/teardown/diag?preflight=" + ctx.nonce, timeout=30
+    )
+    if status != 200:
+        raise CheckFailure(f"GET /teardown/diag -> HTTP {status}")
+    data = json_body(body, "/teardown/diag")
+    if not isinstance(data, dict):
+        raise CheckFailure("/teardown/diag did not return a JSON object")
+    if data.get("ready") is not True:
+        problems = "; ".join(str(item) for item in (data.get("problems") or []))
+        raise CheckFailure(f"the teardown bay is not ready: {problems or 'unknown problem'}")
+    expected = data.get("expected_version")
+    if not expected:
+        raise CheckFailure("/teardown/diag does not report the expected REA version")
+    if data.get("installed_version") != expected:
+        raise CheckFailure(
+            f"REA {data.get('installed_version')} is installed, expected {expected}"
+        )
+    if data.get("pinned_version") != expected:
+        raise CheckFailure(f"REA is pinned to {data.get('pinned_version')}, expected {expected}")
+    if data.get("provenance_ok") is not True:
+        raise CheckFailure("REA did not come from github.com/morluto/rea")
+    node = data.get("node") if isinstance(data.get("node"), dict) else {}
+    if node.get("ok") is not True:
+        raise CheckFailure(f"Node.js is not usable: {snippet(node)}")
+    chrome = data.get("chrome") if isinstance(data.get("chrome"), dict) else {}
+    if chrome.get("found") is not True:
+        raise CheckFailure("Google Chrome was not found")
+    if data.get("problems"):
+        raise CheckFailure(f"teardown diag still reports problems: {data['problems']}")
+    return Outcome(
+        "pass",
+        f"ready · REA {expected} pinned · Node {node.get('version')} · "
+        f"Chrome found · {data.get('tools_home')}",
+    )
+
+
+def check_teardown_observe(ctx: Context) -> Outcome:
+    status, _, body = request(
+        ctx.base_url + "/teardown",
+        method="POST",
+        payload={"url": "https://example.com"},
+        timeout=300,
+    )
+    if status != 200:
+        raise CheckFailure(f"POST /teardown -> HTTP {status}")
+    data = json_body(body, "POST /teardown")
+    if not isinstance(data, dict):
+        raise CheckFailure("POST /teardown did not return a JSON object")
+    if data.get("ok") is not True:
+        raise CheckFailure(f"live REA observation failed: {snippet(data.get('reply'))}")
+    command = data.get("command")
+    if command != "capture-browser-scenario":
+        raise CheckFailure(f"REA used an unexpected command: {snippet(command)}")
+    evidence = data.get("data")
+    if not isinstance(evidence, dict) or not evidence.get("evidence_id"):
+        raise CheckFailure("REA returned no evidence for the observed website")
+    reply = str(data.get("reply") or "")
+    if "read-only" not in reply.lower():
+        raise CheckFailure(f"the teardown reply does not state it was read-only: {snippet(reply)}")
+    return Outcome(
+        "pass",
+        f"observed https://example.com · {command} · evidence {str(evidence['evidence_id'])[:12]}…",
+    )
+
+
+def check_teardown_law(ctx: Context) -> Outcome:
+    cases = [
+        ({"url": "file:///C:/Windows/win.ini"}, "not a website"),
+        ({"url": "http://127.0.0.1:4700/"}, "private"),
+        ({"url": "https://example.com", "command": "click"}, "read-only"),
+        ({"url": "https://user:pass@example.com"}, "credentials"),
+    ]
+    for payload, expected in cases:
+        status, _, body = request(
+            ctx.base_url + "/teardown", method="POST", payload=payload, timeout=30
+        )
+        if status != 200:
+            raise CheckFailure(f"POST /teardown {payload} -> HTTP {status}")
+        data = json_body(body, "POST /teardown law check")
+        if not isinstance(data, dict) or data.get("ok") is not False:
+            raise CheckFailure(f"a forbidden target was accepted: {payload}")
+        reply = str(data.get("reply") or "")
+        if expected not in reply.lower() and "nothing was touched" not in reply.lower():
+            raise CheckFailure(f"unexpected refusal for {payload}: {snippet(reply)}")
+        if "\n" in reply:
+            raise CheckFailure(f"a teardown refusal was not one line: {payload}")
+    return Outcome(
+        "pass",
+        f"{len(cases)}/{len(cases)} refusals · file, private, interactive, credentials",
+    )
+
+
 # ---------------------------------------------------------------------------
 # runner
 # ---------------------------------------------------------------------------
@@ -1016,6 +1110,9 @@ CHECKS = [
     ("Files served to the browser match the files on disk", check_served_files),
     ("config.json is not reachable from the browser", check_config_secret),
     ("A ?mute=1 tab is silent", check_mute),
+    ("Teardown bay reports ready with pinned REA", check_teardown_diag),
+    ("Teardown observes a public website read-only", check_teardown_observe),
+    ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 
 
