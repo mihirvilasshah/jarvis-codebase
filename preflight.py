@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import collections
 import hashlib
 import json
@@ -44,6 +45,18 @@ CAPTURES_DIR = NOTES_DIR / "captures"
 DEFAULT_BASE_URL = "http://127.0.0.1:4700"
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 DETAIL_WIDTH = 100
+TINY_JPEG = (
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAx"
+    "NDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy"
+    "MjIyMjIyMjIyMjIyMjL/wAARCABAAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgED"
+    "AwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdI"
+    "SUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW"
+    "19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQA"
+    "AQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldY"
+    "WVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk"
+    "5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDj6KKK+oPnwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooo"
+    "oAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z"
+)
 
 BROWSER_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -107,6 +120,7 @@ def request(
     payload=None,
     headers: dict | None = None,
     timeout: int = 30,
+    raw: bytes | None = None,
 ) -> tuple[int, dict, bytes]:
     body = None
     merged = {
@@ -116,7 +130,9 @@ def request(
     }
     if headers:
         merged.update(headers)
-    if payload is not None:
+    if raw is not None:
+        body = raw
+    elif payload is not None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         merged["Content-Type"] = "application/json; charset=utf-8"
     req = urllib.request.Request(url, data=body, method=method, headers=merged)
@@ -1337,6 +1353,42 @@ def check_teardown_no_chrome(ctx: Context) -> Outcome:
     return Outcome("pass", "no investigation Chrome · no profile folders · port 9333 free")
 
 
+def check_see_media_type(ctx: Context) -> Outcome:
+    status, _, body = request(
+        ctx.base_url + "/see?question=" + urllib.parse.quote("what am I looking at"),
+        method="POST",
+        raw=b'{"question":"x"}',
+        headers={"Content-Type": "application/json"},
+        timeout=15,
+    )
+    if status != 415:
+        raise CheckFailure(f"a non-JPEG body was accepted: HTTP {status}: {snippet(body)}")
+    data = json_body(body, "/see wrong media type")
+    if data.get("code") != "unsupported_media_type":
+        raise CheckFailure(f"unexpected refusal: {snippet(data)}")
+    return Outcome("pass", "wrong media type refused with 415 unsupported_media_type")
+
+
+def check_see_endpoint(ctx: Context) -> Outcome:
+    jpeg = base64.b64decode(TINY_JPEG)
+    status, _, body = request(
+        ctx.base_url + "/see?question=" + urllib.parse.quote("What am I looking at?"),
+        method="POST",
+        raw=jpeg,
+        headers={"Content-Type": "image/jpeg"},
+        timeout=180,
+    )
+    if status != 200:
+        raise CheckFailure(f"POST /see -> HTTP {status}: {snippet(body)}")
+    data = json_body(body, "POST /see")
+    answer = str(data.get("answer") or "").strip()
+    if not answer:
+        raise CheckFailure(f"/see returned no answer: {snippet(data)}")
+    if not isinstance(data.get("nodes"), list):
+        raise CheckFailure("/see returned no nodes array")
+    return Outcome("pass", f"JPEG frame read · {len(answer)} chars · {snippet(answer, 120)!r}")
+
+
 def check_teardown_law(ctx: Context) -> Outcome:
     cases = [
         ({"url": "file:///C:/Windows/win.ini"}, "not a website"),
@@ -1433,6 +1485,8 @@ def check_teardown_evidence(ctx: Context) -> Outcome:
 
 CHECKS = [
     ("Server is up and serving the viewer", check_server),
+    ("Screen endpoint refuses the wrong media type", check_see_media_type),
+    ("Screen endpoint reads a real JPEG frame", check_see_endpoint),
     ("Graph data loads and the node count is greater than zero", check_graph),
     ("/chat returns a well-formed answer with a nodes array", check_chat),
     ("The API key in config.json is valid", check_api_key),

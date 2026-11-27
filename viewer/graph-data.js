@@ -180,24 +180,6 @@ const GRAPH = {
       "label": "Packaging and Labels",
       "group": "Product",
       "excerpt": "Packaging and Labels All retail coffee is packed in compostable kraft bags with a one-way valve. Labels are printed in-house on the thermal printer. Required label fields: Northwind Roasters and logo Coffee name and roast level Origin: farm or cooperative, region, altitude, process Tasting notes Net weight (12 oz / 340 g or 2 lb / 907 g) Roast date and best-by date (best within 8 weeks) Brew guidance and website Batch number for traceability Standards: Print labels the same day as roasting; see Roasting Schedule. Apply labels straight and centered, 2 cm from the top seam. Check weight on the scale: 340 g ± 5 g. Wholesale cases use plain cases with a roast-date sticker and brew card. See…"
-    },
-    {
-      "id": 30,
-      "label": "Jarvis",
-      "group": "Captures",
-      "excerpt": "Jarvis Jarvis is the butler of the knowledge galaxy: dry, impeccably polite, and honest about the evidence. His reverse-engineering kit is REA."
-    },
-    {
-      "id": 31,
-      "label": "REA",
-      "group": "Captures",
-      "excerpt": "REA REA (Reverse Engineer Anything) is the read-only observation kit used by Jarvis on websites. It attaches to a browser Jarvis owns; it never clicks, types, logs in, or changes anything."
-    },
-    {
-      "id": 32,
-      "label": "Linear.app 2026 11 27",
-      "group": "Teardowns",
-      "excerpt": "Teardown · linear.app Verdict: A highly optimized, component-heavy Next.js marketing site. The answer Linear uses Next.js for its frontend, serving assets from a static CDN. The architecture prioritizes fast initial load times through extensive code-splitting. The stack Framework: Next.js (Evidence: Script paths contain _next/static/chunks [Jarvis]) Hosting/CDN: static.linear.app (Evidence: All script URLs point to this subdomain [Jarvis]) Browser: Chrome/158.0.8127.37 (Evidence: Browser metadata [Jarvis]) Language: JavaScript (Evidence: All assets are .js files [Jarvis]) How the effect works The browser requests the main HTML document from linear.app. The HTML references numerous…"
     }
   ],
   "links": [
@@ -560,18 +542,6 @@ const GRAPH = {
     {
       "source": 27,
       "target": 29
-    },
-    {
-      "source": 30,
-      "target": 31
-    },
-    {
-      "source": 30,
-      "target": 32
-    },
-    {
-      "source": 31,
-      "target": 32
     }
   ]
 };

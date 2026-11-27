@@ -565,6 +565,35 @@
     .history-actions .ghost-btn { padding: 8px 13px; font-size: 11px; }
     .history-actions .danger:hover { color: #fecdd3; border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.08); }
 
+    .screen-btn.active { border-color: rgba(251, 113, 133, 0.6); color: #ffd9df; background: rgba(251, 113, 133, 0.14); }
+    .screen-btn.active::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fb7185; box-shadow: 0 0 8px #fb7185; }
+    .screen-indicator {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      z-index: 70;
+      display: none;
+      align-items: center;
+      gap: 9px;
+      transform: translateX(-50%);
+      border: 2px solid #fb7185;
+      border-radius: 999px;
+      background: rgba(60, 8, 18, 0.96);
+      padding: 9px 18px;
+      color: #fff0f3;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.16), 0 12px 40px rgba(0, 0, 0, 0.5);
+      animation: screenPulse 1.4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .screen-indicator.show { display: inline-flex; }
+    .screen-indicator::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #fb7185; box-shadow: 0 0 12px #fb7185; }
+    @keyframes screenPulse { 0%, 100% { box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.14), 0 12px 40px rgba(0,0,0,.5); } 50% { box-shadow: 0 0 0 10px rgba(251, 113, 133, 0.05), 0 12px 40px rgba(0,0,0,.5); } }
+
     .teardown-panel {
       position: fixed;
       top: 104px;
@@ -800,6 +829,7 @@
     <div class="chat-head">
       <span class="chat-label">Ask your notes</span>
       <div class="chat-tools">
+        <button id="screen-btn" class="chat-tool chat-tool-text" type="button" title="Share your screen" aria-label="Share your screen" aria-pressed="false">Screen</button>
         <button id="voice-btn" class="chat-tool" type="button" title="Ask by voice" aria-label="Ask by voice" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
         </button>
@@ -834,6 +864,9 @@
   <button id="chat-launcher" class="chat-launcher" type="button" aria-label="Open chat">
     <span aria-hidden="true">✦</span> Ask your notes
   </button>
+
+  <div id="screen-indicator" class="screen-indicator" role="status" aria-live="assertive">Screen being shared</div>
+  <video id="screen-video" autoplay muted playsinline style="display:none" aria-hidden="true"></video>
 
   <section id="teardown-panel" class="teardown-panel" aria-live="polite">
     <div class="teardown-head">
@@ -1311,6 +1344,93 @@
         teardownLast
           ? { label: teardownLast.label, spoken: teardownLast.spoken, stack: teardownLast.stack, totals: teardownLast.totals }
           : null;
+    }
+
+    /* =====================================================================
+       SIGHT - one frame from a live getDisplayMedia share, at question time.
+       ===================================================================== */
+    const screenBtn = $('screen-btn');
+    const screenIndicator = $('screen-indicator');
+    const screenVideo = $('screen-video');
+    let screenStream = null;
+
+    function screenLive() {
+      return !!screenStream && screenStream.getVideoTracks().some((track) => track.readyState === 'live');
+    }
+
+    function stopScreen() {
+      if (screenStream) {
+        for (const track of screenStream.getTracks()) {
+          try { track.stop(); } catch { /* already stopped */ }
+        }
+      }
+      screenStream = null;
+      screenVideo.srcObject = null;
+      screenBtn.classList.remove('active');
+      screenBtn.setAttribute('aria-pressed', 'false');
+      screenBtn.textContent = 'Screen';
+      screenIndicator.classList.remove('show');
+    }
+
+    async function startScreen() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        toast('This browser cannot share a screen, sir.');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 1 }, audio: false
+        });
+        screenStream = stream;
+        screenVideo.srcObject = stream;
+        try { await screenVideo.play(); } catch { /* autoplay may wait */ }
+        screenBtn.classList.add('active');
+        screenBtn.setAttribute('aria-pressed', 'true');
+        screenBtn.textContent = 'Stop share';
+        screenIndicator.classList.add('show');
+        for (const track of stream.getVideoTracks()) {
+          track.addEventListener('ended', stopScreen, { once: true });
+        }
+        toast('I can see your screen, sir.');
+      } catch {
+        toast('No screen was shared.');
+      }
+    }
+
+    function toggleScreen() {
+      if (screenLive()) stopScreen();
+      else startScreen();
+    }
+
+    async function grabScreenFrame() {
+      if (!screenLive()) {
+        throw new Error('The screen share has ended, sir. Start it again if you want me to look.');
+      }
+      const video = screenVideo;
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error('No live frame is available yet, sir. Try again in a moment.');
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+      if (!blob) throw new Error('I could not read that frame, sir.');
+      return blob;
+    }
+
+    screenBtn.addEventListener('click', toggleScreen);
+    if (new URLSearchParams(location.search).has('debug')) {
+      window.__kgScreen = {
+        live: () => screenLive(),
+        indicator: () => screenIndicator.classList.contains('show'),
+        grab: async () => {
+          const blob = await grabScreenFrame();
+          return { type: blob.type, size: blob.size };
+        },
+        stop: stopScreen
+      };
     }
 
     const GROUP_COLORS = {
@@ -2510,6 +2630,8 @@
       // Decided before the request and long before the camera: is this about
       // the notes at all? Small talk and jokes must never move the galaxy.
       const intent = readNoteIntent(text);
+      const usingScreen = screenLive();
+      const answerIntent = usingScreen ? { aboutNotes: false, social: false, reason: 'screen' } : intent;
 
       cancelSpeech(); // a new question interrupts the previous answer
       setChatClosed(false);
@@ -2522,17 +2644,26 @@
       const typing = addTyping();
 
       try {
-        const response = await fetch(CHAT_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: text,
-            session_id: activeId,
-            history: priorHistory,
-            // Greetings and jokes are answered in character, without notes.
-            social: intent.social === true
-          })
-        });
+        let response;
+        if (usingScreen) {
+          const frame = await grabScreenFrame();
+          response = await fetch('/see?question=' + encodeURIComponent(text), {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: frame
+          });
+        } else {
+          response = await fetch(CHAT_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: text,
+              session_id: activeId,
+              history: priorHistory,
+              social: intent.social === true
+            })
+          });
+        }
         const raw = await response.text();
         let data;
         try {
@@ -2552,7 +2683,7 @@
         // notes were the excuse for asking, not the source of the answer.
         const actionAnswer = Array.isArray(data.receipts) && data.receipts.length > 0;
         // Off-topic and action answers get no citation claim they cannot back up.
-        const citedIds = intent.aboutNotes && !actionAnswer ? ids : [];
+        const citedIds = answerIntent.aboutNotes && !actionAnswer ? ids : [];
 
         typing.remove();
         recordMessage('assistant', answer, citedIds);
@@ -2565,14 +2696,14 @@
           }
         }
         // The one owner decides: fly to the top note, light a cluster, or hold.
-        focusAnswer(actionAnswer ? [] : ids, intent);
+        focusAnswer(actionAnswer ? [] : ids, answerIntent);
         // Speak the written SPOKEN line when the server supplied one.
         const spokenLine =
           typeof data.spoken === 'string' && data.spoken.trim()
             ? data.spoken.trim()
             : spokenSummary(answer);
         speak(spokenLine);
-        if (intent.aboutNotes && ids.length === 0) {
+        if (answerIntent.aboutNotes && ids.length === 0) {
           toast('No notes matched that question. Try a different topic.');
         }
       } catch (error) {
@@ -2581,6 +2712,7 @@
         const message = error && error.message ? error.message : 'Something went wrong. Please try again.';
         addMessage('error', message);
         toast(message);
+        if (usingScreen) speak(message);
       } finally {
         setBusy(false);
         chatInput.focus();

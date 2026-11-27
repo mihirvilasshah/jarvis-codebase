@@ -24,6 +24,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 import brain
 import build
 
+# The gateway occasionally takes longer than its default 45 s under load.
+brain.REQUEST_TIMEOUT = 120
+
 try:
     import teardown
 except Exception:  # THE BAY is optional; Jarvis still boots without it.
@@ -391,6 +394,7 @@ HOST = "127.0.0.1"
 # PORT=0 means "any free port" to the OS; this server always wants 4700.
 PORT = int(os.environ.get("KG_PORT") or os.environ.get("PORT") or "4700") or 4700
 MAX_BODY_BYTES = 64 * 1024
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
 
 TEARDOWN_SYSTEM = """You are Jarvis, the butler of a knowledge galaxy, writing a teardown of a website.
@@ -733,7 +737,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -845,7 +849,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -853,6 +857,37 @@ class Handler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0") or "0")
         except ValueError:
             length = 0
+        if path == "/see":
+            media_type = str(self.headers.get("Content-Type", "") or "").split(";", 1)[0].strip().lower()
+            if media_type != "image/jpeg":
+                self._json(
+                    415,
+                    {
+                        "error": "Send one JPEG frame with Content-Type image/jpeg.",
+                        "code": "unsupported_media_type",
+                        "nodes": [],
+                    },
+                )
+                return
+            if length > MAX_IMAGE_BYTES:
+                self._json(
+                    413,
+                    {"error": "That frame is too large.", "code": "payload_too_large", "nodes": []},
+                )
+                return
+            frame = self.rfile.read(length)
+            query = parse_qs(urlparse(self.path).query)
+            question = (query.get("question") or [""])[0]
+            try:
+                answer = brain.see_image(frame, question)
+                self._json(200, {"answer": answer, "nodes": []})
+            except brain.BrainError as exc:
+                self._json(exc.status, {"error": exc.message, "code": exc.code, "nodes": []})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"error": "The screen could not be read, sir.", "code": "server_error", "nodes": []})
+            return
+
         if length <= 0:
             self._json(
                 400,
