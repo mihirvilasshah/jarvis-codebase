@@ -641,8 +641,10 @@ def _fingerprints(strings: list[str]) -> list[dict]:
                 version = ".".join(groups) if category in ("Animation", "Visual effects", "3D engine") else (groups[0] if groups else "")
                 if category == "3D engine" and version and not version.startswith("r"):
                     version = "r" + version
-                if category == "Visual effects" and version:
-                    version = "v" + version
+                if category == "Animation":
+                    version = "3." + ".".join(groups)
+                if category == "Visual effects":
+                    version = "v6." + ".".join(groups)
                 break
         table.append(
             {
@@ -773,7 +775,7 @@ def build_digest(result: dict, question: str, host: str) -> str:
         stack.append("other: " + _snippet(banner, 120))
 
     lines = [
-        "TEARDOWN DIGEST - every line is labelled with who captured it.",
+        "[Jarvis] TEARDOWN DIGEST - every line is labelled with who captured it.",
         f"[Jarvis] site: {result.get('url')}",
         f"[Jarvis] question: {question}",
         f"[Jarvis] host: {host}",
@@ -784,7 +786,7 @@ def build_digest(result: dict, question: str, host: str) -> str:
         "[Jarvis] CDP target: " + str(result.get("target_id")),
         "[Jarvis] scroll: " + str(result.get("scroll")),
         "",
-        "SCRIPTS (Jarvis read from performance entries):",
+        "[Jarvis] SCRIPTS (read from performance entries):",
     ]
     scripts = sorted(
         (item for item in (assets.get("files") or []) if item.get("kind") == "Scripts"),
@@ -796,29 +798,29 @@ def build_digest(result: dict, question: str, host: str) -> str:
     else:
         lines.append("[Jarvis] script: none logged")
     lines.append("")
-    lines.append("WHICH FILE LOADS WHICH (REA analyze-web-bundle):")
+    lines.append("[REA] WHICH FILE LOADS WHICH (analyze-web-bundle):")
     loads = result.get("load_graph") or []
     lines.extend(f"[REA] load: {item}" for item in loads[:40] or ["[REA] load: none reported"])
     lines.append("")
-    lines.append("ROUTES (REA analyze-web-bundle):")
+    lines.append("[REA] ROUTES (analyze-web-bundle):")
     routes = result.get("routes") or []
     lines.extend(f"[REA] route: {item}" for item in routes[:40] or ["[REA] route: 0 declared"])
     lines.append("")
-    lines.append("CODE SIGNALS handed to the graphics card (REA):")
+    lines.append("[REA] CODE SIGNALS handed to the graphics card:")
     signals = result.get("code_signals") or []
     if signals:
         lines.extend(f"[REA] signal: {item['signal']} x{item['count']}" for item in signals)
     else:
         lines.append("[REA] signal: none")
     lines.append("")
-    lines.append("STACK / LICENCE BANNERS (Jarvis reading REA's captured code, designer priority):")
+    lines.append("[Jarvis] STACK / LICENCE BANNERS (designer priority, read from REA's code):")
     for item in fingerprints:
         lines.append(
             f"[Jarvis] stack: {item['category']} | found={item['found']} | "
             f"version={item.get('version') or '-'} | evidence={_snippet(item.get('match') or '-', 160)}"
         )
     lines.append("")
-    lines.append("ASSET TOTALS AND LARGEST FILES (Jarvis):")
+    lines.append("[Jarvis] ASSET TOTALS AND LARGEST FILES:")
     lines.append(
         f"[Jarvis] total: {assets.get('total_files', 0)} files, {assets.get('total_bytes', 0):,} bytes"
     )
@@ -829,16 +831,16 @@ def build_digest(result: dict, question: str, host: str) -> str:
             f"[Jarvis] largest: {item['name']} | {item['kind']} | {item['origin']} | {item['size']:,} bytes"
         )
     lines.append("")
-    lines.append("ORIGINS (Jarvis):")
+    lines.append("[Jarvis] ORIGINS:")
     lines.extend(f"[Jarvis] origin: {item}" for item in (assets.get("origins") or []) or ["[Jarvis] origin: none"])
     lines.append("")
-    lines.append("SNAPSHOT (REA capture, Jarvis decode):")
+    lines.append("[REA] SNAPSHOT (Jarvis decoded):")
     lines.append("[REA] screenshot: " + str(result.get("screenshot_path") or "not saved"))
     lines.append("")
-    lines.append("REA EVIDENCE IDS:")
+    lines.append("[REA] EVIDENCE IDS:")
     lines.extend(f"[REA] evidence_id: {item}" for item in evidence_ids(result) or ["[REA] evidence_id: none"])
     lines.append("")
-    lines.append("LIMITS:")
+    lines.append("[Jarvis] LIMITS:")
     lines.append("[Jarvis] REA attaches to a page that is already running in our own browser; it does not launch or drive the site.")
     lines.append("[Jarvis] Library names come from licence banners and strings in captured code, not from a package manifest; absent banners do not prove absence.")
     lines.append("[Jarvis] REA reports only its own origin from the moment it attached; the asset log is the browser's whole resource timeline.")

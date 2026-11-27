@@ -19,7 +19,7 @@ import traceback
 import unicodedata
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import brain
 import build
@@ -203,7 +203,9 @@ def apply_control_tags(result: dict) -> dict:
 REMEMBER_RE = re.compile(r"^\s*remember\s+that\b[\s,:;\-–—]*(.*)$", re.I | re.S)
 CAPTURE_LOCK = threading.Lock()
 TEARDOWN_LOCK = threading.Lock()
-TEARDOWN_STATUS = {"active": False, "site": "", "step": 0, "label": "", "started": 0.0}
+TEARDOWN_STATUS = {
+    "active": False, "site": "", "step": 0, "label": "", "started": 0.0, "steps": []
+}
 TEARDOWN_CANCEL = False
 LAST_TEARDOWN = {}
 
@@ -426,8 +428,30 @@ def _front_tab_url() -> str | None:
 
 def _teardown_progress(number: int, label: str) -> None:
     TEARDOWN_STATUS.update({"active": True, "step": number, "label": label})
+    seen = TEARDOWN_STATUS.setdefault("steps", [])
+    if label not in seen:
+        seen.append(label)
     if TEARDOWN_CANCEL:
         raise RuntimeError("cancelled")
+
+
+def _teardowns_root() -> Path:
+    return build.NOTES_DIR / "captures" / "teardowns"
+
+
+def _safe_teardown_path(raw, extensions) -> Path | None:
+    if not isinstance(raw, str) or not raw:
+        return None
+    decoded = unquote(unquote(raw)).replace("\\", "/")
+    if decoded.startswith(("/", "file:")) or ".." in decoded.split("/") or "\x00" in decoded:
+        return None
+    root = _teardowns_root().resolve()
+    candidate = (root / decoded).resolve()
+    if root not in candidate.parents and candidate != root:
+        return None
+    if candidate.suffix.lower() not in extensions or not candidate.is_file():
+        return None
+    return candidate
 
 
 def _last_teardown_note() -> Path | None:
@@ -598,7 +622,7 @@ def compose_teardown(url, question=None, headless: bool = False) -> dict:
 
     TEARDOWN_CANCEL = False
     TEARDOWN_STATUS.update(
-        {"active": True, "site": str(url or ""), "step": 0, "label": "", "started": time.time()}
+        {"active": True, "site": str(url or ""), "step": 0, "label": "", "started": time.time(), "steps": []}
     )
     try:
         site = str(url or "").strip()
@@ -740,6 +764,31 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             else:
                 self._json(200, teardown.diagnose())
+            return
+        if path in ("/teardown/note", "/teardown/image"):
+            query = parse_qs(urlparse(self.path).query)
+            raw = (query.get("file") or [""])[0]
+            if path == "/teardown/note":
+                safe = _safe_teardown_path(raw, {".md"})
+                if safe is None:
+                    self._json(403, {"ok": False, "error": "Outside the teardowns folder."})
+                    return
+                self._json(200, {"ok": True, "label": safe.stem, "content": safe.read_text(encoding="utf-8")})
+                return
+            safe = _safe_teardown_path(raw, {".png", ".jpg", ".jpeg", ".webp"})
+            if safe is None:
+                self._json(403, {"ok": False, "error": "Outside the teardowns folder."})
+                return
+            body = safe.read_bytes()
+            media = "image/png" if safe.suffix.lower() == ".png" else "image/jpeg" if safe.suffix.lower() in {".jpg", ".jpeg"} else "image/webp"
+            self.send_response(200)
+            self.send_header("Content-Type", media)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
             return
         if path == "/teardown/status":
             self._json(200, dict(TEARDOWN_STATUS))

@@ -18,6 +18,7 @@ import collections
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -1249,6 +1250,93 @@ def check_teardown_routes(ctx: Context) -> Outcome:
         shutil.rmtree(profile, ignore_errors=True)
 
 
+def check_teardown_kit_pinned(ctx: Context) -> Outcome:
+    status, _, body = request(ctx.base_url + "/teardown/diag", timeout=30)
+    if status != 200:
+        raise CheckFailure(f"GET /teardown/diag -> HTTP {status}")
+    data = json_body(body, "/teardown/diag")
+    expected = data.get("expected_version")
+    if data.get("ready") is not True:
+        raise CheckFailure(f"kit is not ready: {data.get('problems')}")
+    if not expected or data.get("installed_version") != expected or data.get("pinned_version") != expected:
+        raise CheckFailure(
+            f"versions disagree: installed={data.get('installed_version')} "
+            f"pinned={data.get('pinned_version')} expected={expected}"
+        )
+    if data.get("provenance_ok") is not True:
+        raise CheckFailure("REA provenance is not github.com/morluto/rea")
+    return Outcome("pass", f"ready · installed=pinned=expected={expected} · {data.get('repository')}")
+
+
+def check_teardown_offline(ctx: Context) -> Outcome:
+    html = (VIEWER / "index.html").read_text(encoding="utf-8")
+    match = re.search(r"function speechToAddress\(text\) \{[\s\S]*?\n    \}", html)
+    if not match:
+        raise CheckFailure("speechToAddress was not found in the served viewer")
+    cases = ["igloo dot inc", "stripe.com slash pricing", "localhost:5001", "make it pop", "wikipedia.org"]
+    expected = ["https://igloo.inc", "https://stripe.com/pricing", "http://localhost:5001", None, "https://wikipedia.org"]
+    script = (
+        match.group(0) + "\nconst cases = " + json.dumps(cases)
+        + ";\nconsole.log(JSON.stringify(cases.map(c => speechToAddress(c))));\n"
+    )
+    proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=30)
+    if proc.returncode != 0:
+        raise CheckFailure(f"address parser failed: {snippet(proc.stderr or proc.stdout, 160)}")
+    actual = json.loads(proc.stdout.strip().splitlines()[-1])
+    if actual != expected:
+        raise CheckFailure(f"address parsing differs: got {actual}, wanted {expected}")
+
+    try:
+        import teardown as kg
+    except Exception as exc:
+        raise CheckFailure(f"teardown.py could not be imported: {exc}")
+    sample = (
+        "/** @license Copyright 2020-2025 Three.js Authors SPDX-License-Identifier: MIT */\n"
+        "const REVISION = '165';\n\n/*! GSAP 3.12.5 */\n"
+    )
+    versions = {item["category"]: item["version"] for item in kg._fingerprints([sample])}
+    if versions.get("3D engine") != "r165" or versions.get("Animation") != "3.12.5":
+        raise CheckFailure(f"fingerprints differ: {versions}")
+
+    synthetic = {
+        "url": "https://example.com", "final_url": "https://example.com", "title": "Example",
+        "load_seconds": 1.0, "intro_wait_seconds": 2.5, "browser_version": "Chrome",
+        "target_id": "x", "scroll": {}, "screenshot_path": "",
+        "asset_log": {"files": [], "groups": {}, "top12": [], "total_files": 0, "total_bytes": 0, "origins": []},
+        "load_graph": [], "routes": [], "code_signals": [], "fingerprints": [], "other_banners": [],
+        "evidence": [{"source": "REA", "data": {}}, {"source": "Jarvis", "data": {}}],
+    }
+    digest = kg.build_digest(synthetic, "What is this?", "example.com")
+    unlabelled = [line for line in digest.splitlines() if line.strip() and not line.startswith(("[REA]", "[Jarvis]"))]
+    if unlabelled:
+        raise CheckFailure(f"unlabelled digest lines: {unlabelled[:4]}")
+    return Outcome("pass", "5 addresses · Three.js r165 + GSAP 3.12.5 · every digest line labelled")
+
+
+def check_teardown_no_chrome(ctx: Context) -> Outcome:
+    try:
+        import teardown as kg
+    except Exception as exc:
+        raise CheckFailure(f"teardown.py could not be imported: {exc}")
+    pids = kg._profile_pids("jarvis-tools\\rea\\profiles")
+    if pids:
+        raise CheckFailure(f"investigation Chrome still running: {pids}")
+    profiles = kg.PROFILES_HOME
+    leftovers = [item.name for item in profiles.iterdir()] if profiles.exists() else []
+    if leftovers:
+        raise CheckFailure(f"profile folders remain: {leftovers}")
+    port = socket.socket()
+    try:
+        port.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            port.bind(("127.0.0.1", 9333))
+        except OSError:
+            raise CheckFailure("loopback port 9333 is still busy")
+    finally:
+        port.close()
+    return Outcome("pass", "no investigation Chrome · no profile folders · port 9333 free")
+
+
 def check_teardown_law(ctx: Context) -> Outcome:
     cases = [
         ({"url": "file:///C:/Windows/win.ini"}, "not a website"),
@@ -1354,10 +1442,13 @@ CHECKS = [
     ("config.json is not reachable from the browser", check_config_secret),
     ("A ?mute=1 tab is silent", check_mute),
     ("Teardown bay reports ready with pinned REA", check_teardown_diag),
+    ("Teardown kit ready with the pinned REA version", check_teardown_kit_pinned),
+    ("Teardown offline checks pass", check_teardown_offline),
     ("Teardown owns a fresh browser and observes read-only", check_teardown_observe),
     ("Teardown captures labelled five-step evidence", check_teardown_evidence),
     ("Teardown composes a brain-written note with one-at-a-time guard", check_teardown_compose),
     ("Voice routes trigger only for named sites and panel commands", check_teardown_routes),
+    ("No investigation Chrome is running", check_teardown_no_chrome),
     ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 

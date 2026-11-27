@@ -1056,8 +1056,8 @@
       const source = String(text || '');
       const match =
         source.match(/\b[a-z0-9-]+(?:\s+dot\s+[a-z0-9-]+)+\b/i) ||
-        source.match(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/i) ||
-        source.match(/\blocalhost(?:\s+colon\s+\d+)?\b/i);
+        source.match(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\s+slash\s+[a-z0-9-_~]+)*\b/i) ||
+        source.match(/\blocalhost(?:(?:\s+colon\s+|:)\d+)?\b/i);
       if (!match) return null;
       let address = match[0]
         .replace(/\s*dot\s*/gi, '.')
