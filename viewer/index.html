@@ -979,7 +979,7 @@
         '<span class="dot" style="--c:' + groupColor(group) + '"></span>' +
         '<span>' + escapeHtml(group) + '</span>' +
         '<span class="count">' + count + '</span>';
-      button.addEventListener('click', () => toggleGroup(group));
+      button.addEventListener('click', () => focusGroup(group));
       legendEl.appendChild(button);
     }
 
@@ -1077,7 +1077,7 @@
       .linkDirectionalParticleWidth(1.15)
       .linkDirectionalParticleSpeed(0.0035)
       .linkDirectionalParticleColor(() => '#bff7ff')
-      .onNodeClick((node) => selectNode(node.id, true))
+      .onNodeClick((node) => focusNote(node.id, { fly: true, reason: 'graph click' }))
       .onNodeHover((node) => {
         hoveredId = node ? node.id : null;
         graphEl.style.cursor = node ? 'pointer' : 'grab';
@@ -1291,13 +1291,43 @@
           const label = document.createElement('span');
           label.textContent = neighbour.label;
           button.append(dot, label);
-          button.addEventListener('click', () => selectNode(neighbour.id, true));
+          button.addEventListener('click', () => focusNote(neighbour.id, { fly: true, reason: 'panel link' }));
           panelLinks.appendChild(button);
         }
       }
 
       panel.classList.add('open');
       panel.setAttribute('aria-hidden', 'false');
+    }
+
+    /* =====================================================================
+       FOCUS OWNER
+       This is the only block allowed to move the camera or to change which
+       nodes are lit. Entry points:
+         focusNote()    - attention on one note: panel, neighbours, flight
+         focusCluster() - light a set, deliberately without any camera move
+         focusHold()    - leave the galaxy exactly as it is
+         focusAnswer()  - the answer path, which picks one of the three above
+         focusGroup() / focusReset() - the user's own lenses and reset
+       Nothing outside this block may touch cameraPosition(), selectedId or
+       cited. New features call these functions; they never route around them.
+       ===================================================================== */
+
+    const CLUSTER_MIN = 4; // four or more sources: flying to one of them lies
+
+    function publishFocus(mode, ids, meta) {
+      const info = meta || {};
+      const active = activeSet();
+      window.__kgFocus = {
+        mode: mode,
+        ids: ids.slice(),
+        selected: selectedId,
+        lit: active ? active.size : nodes.length,
+        panel: panel.classList.contains('open'),
+        camera: graph.cameraPosition(),
+        reason: info.reason || '',
+        question: info.question || ''
+      };
     }
 
     function closePanel() {
@@ -1308,19 +1338,52 @@
       if (graph) graph.controls().autoRotate = !focusedGroup;
     }
 
-    function selectNode(id, fly) {
+    function focusNote(id, options) {
       const node = nodes[id];
       if (!node) return;
+      const opts = options || {};
+      cited.clear(); // an older answer's glow must not survive the new focus
       selectedId = id;
       focusedGroup = null;
       updateLegendActive();
       openPanel(node);
       applyFocus();
-      if (fly) flyTo(node);
+      if (opts.fly !== false) flyTo(node);
       graph.controls().autoRotate = false;
+      publishFocus('note', [id], opts);
     }
 
-    function toggleGroup(group) {
+    function focusCluster(ids, meta) {
+      const unique = [...new Set(ids)].filter((id) => Number.isInteger(id) && nodes[id]);
+      if (!unique.length) return;
+      selectedId = null;
+      focusedGroup = null;
+      panel.classList.remove('open');
+      panel.setAttribute('aria-hidden', 'true');
+      updateLegendActive();
+      cited = new Set(unique);
+      applyFocus();
+      // No camera move on purpose: with this many sources there is no single
+      // honest place to fly to, so the whole cluster is lit where it stands.
+      publishFocus('cluster', unique, meta);
+    }
+
+    function focusHold(meta) {
+      // Small talk and unanswerable questions: nothing moves, nothing dims.
+      publishFocus('held', [], meta);
+    }
+
+    function focusAnswer(ids, intent) {
+      const unique = [...new Set(ids)].filter((id) => Number.isInteger(id) && nodes[id]);
+      if (!intent || !intent.aboutNotes || !unique.length) {
+        focusHold(intent || { reason: 'no intent' });
+        return;
+      }
+      if (unique.length >= CLUSTER_MIN) focusCluster(unique, intent);
+      else focusNote(unique[0], { fly: true, reason: intent.reason, question: intent.question });
+    }
+
+    function focusGroup(group) {
       selectedId = null;
       panel.classList.remove('open');
       panel.setAttribute('aria-hidden', 'true');
@@ -1349,9 +1412,15 @@
       } else {
         graph.cameraPosition({ x: 0, y: 45, z: 480 }, { x: 0, y: 0, z: 0 }, 1200);
       }
+      publishFocus('group', membersOfGroup(focusedGroup), { reason: 'legend: ' + group });
     }
 
-    function resetView() {
+    function membersOfGroup(group) {
+      if (!group) return [];
+      return nodes.filter((node) => node.group === group).map((node) => node.id);
+    }
+
+    function focusReset() {
       selectedId = null;
       focusedGroup = null;
       cited.clear();
@@ -1361,10 +1430,11 @@
       applyFocus();
       graph.cameraPosition({ x: 0, y: 45, z: 480 }, { x: 0, y: 0, z: 0 }, 1200);
       graph.controls().autoRotate = true;
+      publishFocus('reset', [], { reason: 'reset button' });
     }
 
     $('panel-close').addEventListener('click', closePanel);
-    $('reset-view').addEventListener('click', resetView);
+    $('reset-view').addEventListener('click', focusReset);
     $('panel-ask').addEventListener('click', () => {
       if (selectedId === null) return;
       chatInput.value = 'What should I know about ' + nodes[selectedId].label + '?';
@@ -1407,6 +1477,114 @@
     const isLocal4700 =
       (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '4700';
     const CHAT_ENDPOINT = window.KG_CHAT_ENDPOINT || (isLocal4700 ? '/chat' : '/api/chat');
+
+    /* =====================================================================
+       NOTE INTENT
+       Runs before the request leaves the page, so the camera decision is
+       never made from the answer alone. A question counts as being about the
+       notes only when it names a note, matches note vocabulary, or says so
+       outright. Greetings, jokes and chat hold the graph still even when they
+       happen to mention coffee.
+       ===================================================================== */
+
+    const GREETING_PREFIX =
+      /^\s*(?:(?:hi|hey|hello|hiya|yo|howdy|greetings|good\s+(?:morning|afternoon|evening)|morning|afternoon|evening|salaam|namaste|sup)\b[\s,.!:;—-]*)+/i;
+
+    const SMALL_TALK_PATTERNS = [
+      /^(?:thanks|thank\s+you|ta|cheers|appreciate\s+it|nice\s+one)\b/i,
+      /^(?:bye|goodbye|good\s+night|night|see\s+you)\b/i,
+      /^(?:ok|okay|cool|nice|great|got\s+it|sounds\s+good|never\s+mind|no\s+worries|lol|lmao|haha|ha)\b/i,
+      /\b(?:tell\s+me\s+a\s+joke|joke|make\s+me\s+laugh|funny|pun|humou?r|riddle)\b/i,
+      /\b(?:who\s+are\s+you|what\s+are\s+you|how\s+are\s+you|how'?s\s+it\s+going|how'?s\s+your\s+day|what\s+can\s+you\s+do|are\s+you\s+(?:there|ok|okay|awake|alive|real)|i\s+love\s+you|sing(?:\s+me)?\s+a\s+song|tell\s+me\s+a\s+story|write\s+me\s+a\s+poem|your\s+name)\b/i,
+      /\b(?:what'?s\s+the\s+(?:weather|time|date)|what\s+time\s+is\s+it|what\s+day\s+is\s+it)\b/i
+    ];
+
+    const NOTE_CUE = /\b(?:notes?|galaxy|knowledge\s+(?:base|graph)|citation|sources?)\b/i;
+
+    const WORD_STOPWORDS = new Set(
+      ('a about above after again all also am an and any are as at be been being but by can could did do does ' +
+        'doing down each few for from get got had has have having he her here hers him his how i if in into is it ' +
+        'its just know like made make many may me might more most much must my need no not now of off on once only ' +
+        'or other our out over own please same she should show so some such tell than that the their them then ' +
+        'there these they thing things this those through to too under up us very want was we were what when where ' +
+        'which while who whom why will with would you your')
+        .split(' ')
+    );
+
+    function stemWord(word) {
+      // Same coarse stemming the brain uses, so "roasting" meets "roast".
+      for (const suffix of ['ing', 'ed', 'es', 's', 'e']) {
+        if (word.length > suffix.length + 3 && word.endsWith(suffix)) {
+          return word.slice(0, -suffix.length);
+        }
+      }
+      return word;
+    }
+
+    function wordsOf(text) {
+      const found = String(text || '').toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) || [];
+      const words = [];
+      for (const raw of found) {
+        const word = raw.replace(/^['-]+|['-]+$/g, '');
+        if (word.length >= 3) words.push(word);
+      }
+      return words;
+    }
+
+    let labelWords = null;
+    let bodyWords = null;
+
+    function buildNoteWords() {
+      if (labelWords) return;
+      labelWords = new Set();
+      bodyWords = new Set();
+      for (const node of nodes) {
+        for (const word of wordsOf(node.label)) {
+          labelWords.add(word);
+          labelWords.add(stemWord(word));
+        }
+        for (const word of wordsOf(node.group + ' ' + (node.excerpt || ''))) {
+          bodyWords.add(word);
+          bodyWords.add(stemWord(word));
+        }
+      }
+    }
+
+    function hasNoteWord(set, word) {
+      return set.has(word) || set.has(stemWord(word));
+    }
+
+    function readNoteIntent(text) {
+      const question = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!question) return { aboutNotes: false, reason: 'empty', question: question };
+
+      // Peel a greeting so "Good morning - what are our hours?" still counts.
+      const body = question.replace(GREETING_PREFIX, '').replace(/^[\s,.!:;—-]+/, '').trim();
+      if (!body) return { aboutNotes: false, reason: 'greeting', question: question };
+
+      // Jokes and chat never move the camera, even when they mention coffee.
+      for (const pattern of SMALL_TALK_PATTERNS) {
+        if (pattern.test(body)) return { aboutNotes: false, reason: 'small talk', question: question };
+      }
+
+      // "What do my notes say about ..." is a note question by definition.
+      if (NOTE_CUE.test(body)) return { aboutNotes: true, reason: 'mentions the notes', question: question };
+
+      buildNoteWords();
+      const terms = wordsOf(body).filter((word) => !WORD_STOPWORDS.has(word));
+      const labelHits = [...new Set(terms.filter((word) => hasNoteWord(labelWords, word)))];
+      const otherHits = [
+        ...new Set(terms.filter((word) => !hasNoteWord(labelWords, word) && hasNoteWord(bodyWords, word)))
+      ];
+
+      if (labelHits.length) {
+        return { aboutNotes: true, reason: 'names a note (' + labelHits.slice(0, 3).join(', ') + ')', question: question };
+      }
+      if (otherHits.length >= 2) {
+        return { aboutNotes: true, reason: 'matches note text (' + otherHits.slice(0, 3).join(', ') + ')', question: question };
+      }
+      return { aboutNotes: false, reason: terms.length ? 'no clear note match' : 'no note words', question: question };
+    }
 
     const SESSIONS_KEY = 'kg_chat_sessions_v1';
     const ACTIVE_KEY = 'kg_active_session';
@@ -1814,7 +1992,7 @@
           chip.type = 'button';
           chip.className = 'source-chip';
           chip.textContent = nodes[id].label;
-          chip.addEventListener('click', () => selectNode(id, true));
+          chip.addEventListener('click', () => focusNote(id, { fly: true, reason: 'source chip' }));
           sources.appendChild(chip);
         }
         message.appendChild(sources);
@@ -1851,6 +2029,10 @@
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
 
+      // Decided before the request and long before the camera: is this about
+      // the notes at all? Small talk and jokes must never move the galaxy.
+      const intent = readNoteIntent(text);
+
       cancelSpeech(); // a new question interrupts the previous answer
       setChatClosed(false);
       if (chatEl.classList.contains('collapsed')) setCollapsed(false);
@@ -1882,14 +2064,17 @@
         const ids = Array.isArray(data.nodes)
           ? data.nodes.filter((id) => Number.isInteger(id) && nodes[id])
           : [];
+        // Off-topic answers get no citation claim they cannot back up.
+        const citedIds = intent.aboutNotes ? ids : [];
 
         typing.remove();
-        recordMessage('assistant', answer, ids);
-        addMessage('assistant', answer, ids);
-        speak(answer); // typed and spoken questions both get a voice
-        cited = new Set(ids);
-        applyFocus();
-        if (ids.length === 0) {
+        recordMessage('assistant', answer, citedIds);
+        addMessage('assistant', answer, citedIds);
+        // The one owner decides: fly to the top note, light a cluster, or hold.
+        focusAnswer(ids, intent);
+        // Only the answer is spoken. The note itself stays on screen, unread.
+        speak(spokenSummary(answer));
+        if (intent.aboutNotes && ids.length === 0) {
           toast('No notes matched that question. Try a different topic.');
         }
       } catch (error) {
@@ -1961,6 +2146,25 @@
       const english = voices.filter((voice) => /^en([-_]|$)/i.test(voice.lang || ''));
       voiceCache = named || british[0] || english[0] || voices[0] || null;
       return voiceCache;
+    }
+
+    function spokenSummary(text) {
+      // The answer, not the note. Capped near 240 characters, no citation numbers.
+      const plain = String(text || '')
+        .replace(/\[\d+\]/g, '')
+        .replace(/[*_`#>]/g, '')
+        .replace(/\s+([.,!?;:])/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!plain) return '';
+      const sentences = plain.match(/[^.!?]+[.!?]+/g) || [plain];
+      let summary = '';
+      for (const sentence of sentences) {
+        if (summary && summary.length + sentence.length > 240) break;
+        summary += sentence.trim() + ' ';
+        if (summary.length >= 200) break;
+      }
+      return (summary.trim() || plain).slice(0, 260);
     }
 
     function speak(text) {
