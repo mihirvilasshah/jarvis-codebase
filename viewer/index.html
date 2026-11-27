@@ -104,6 +104,32 @@
       color:#bcd6e9; text-align:left; padding:10px 11px; cursor:pointer;
     }
     .command-menu button:hover { background:rgba(167,139,250,.10); color:#fff; }
+    .actions-panel {
+      position:fixed; z-index:40; top:82px; right:24px;
+      width:min(440px, calc(100vw - 32px)); max-height:calc(100vh - 110px);
+      overflow:auto; padding:18px; border:1px solid var(--line); border-radius:18px;
+      background:rgba(7,14,25,.97); color:var(--ink); box-shadow:0 20px 60px rgba(0,0,0,.5);
+      display:none;
+    }
+    .actions-panel.open { display:block; }
+    .actions-panel h2 { margin:0; font-size:20px; }
+    .actions-panel p { color:var(--muted); font-size:12px; line-height:1.5; }
+    .actions-panel form { display:grid; gap:8px; margin:12px 0; }
+    .actions-panel input, .actions-panel select {
+      width:100%; min-width:0; padding:9px; border-radius:8px;
+      border:1px solid var(--line); background:#101e30; color:var(--ink); font:inherit;
+    }
+    .actions-panel label { font-size:12px; color:var(--muted); }
+    .actions-panel button { cursor:pointer; }
+    .action-item { padding:10px 0; border-top:1px solid var(--line); }
+    .action-item strong { display:block; overflow-wrap:anywhere; }
+    .action-item small { color:var(--muted); }
+    .action-item-controls { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+    .action-item-controls input { flex:1 1 190px; width:auto; }
+    .actions-panel .ghost-btn { padding:6px 10px; }
+    @media (max-width: 600px) {
+      .actions-panel { top:70px; right:8px; max-height:calc(100vh - 85px); }
+    }
     .brand { display: flex; align-items: flex-start; gap: 14px; }
     .brand-mark {
       width: 38px;
@@ -959,11 +985,37 @@
         </svg>
       </button>
       <div id="command-menu" class="command-menu" aria-label="Live action menu">
+        <button id="command-actions" type="button">Voice actions</button>
+        <button id="command-manage" type="button">Tasks and reminders</button>
         <button id="command-research" type="button">🔎 Web research</button>
         <button id="command-rea" type="button">◉ Observe a website with REA</button>
       </div>
     </div>
   </header>
+
+  <section id="actions-panel" class="actions-panel" aria-label="Tasks and reminders" aria-hidden="true">
+    <div class="panel-top">
+      <h2>Tasks and reminders</h2>
+      <button id="actions-close" class="icon-btn" type="button" aria-label="Close tasks and reminders">×</button>
+    </div>
+    <p>Local to this computer. Reminders appear while JARVIS is open; missed reminders appear when you return.</p>
+    <p id="actions-status" role="status" aria-live="polite"></p>
+    <form id="action-command-form">
+      <label for="action-command">Type an action</label>
+      <input id="action-command" maxlength="500" placeholder="Add task buy coffee" autocomplete="off" />
+      <button class="ghost-btn" type="submit">Run action</button>
+    </form>
+    <form id="action-create-form">
+      <label for="action-kind">Add an item</label>
+      <select id="action-kind"><option value="task">Task</option><option value="reminder">Reminder</option></select>
+      <input id="action-title" maxlength="300" required placeholder="What needs doing?" aria-label="Item title" />
+      <label for="action-time">Date and time (required for reminders)</label>
+      <input id="action-time" type="datetime-local" />
+      <button class="ghost-btn" type="submit">Add</button>
+    </form>
+    <button id="action-notifications" class="ghost-btn" type="button">Enable notifications</button>
+    <div id="action-items" aria-live="polite"></div>
+  </section>
 
   <nav id="legend" class="legend" aria-label="Filter notes by group">
     <p class="legend-title">Clusters</p>
@@ -1165,6 +1217,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="./graph-data.js"></script>
+  <script src="./action-commands.js?v=hybrid-actions-3"></script>
   <script>
     window.__kgErrors = [];
     window.addEventListener('error', function (event) {
@@ -3310,7 +3363,7 @@
     let recognition = null;    // the single SpeechRecognition instance
     let wantListening = false; // the mic is meant to be on right now
     let activeVoiceMode = 'notes';
-    let activeActionIntent = 'research';
+    let activeActionIntent = 'actions';
     let voiceBuffer = '';      // final speech collected for this thought
     let interimLive = '';      // speech the engine has not finalised yet
     let finishTimer = 0;       // the FINISH_MS countdown
@@ -3485,6 +3538,10 @@
       if (!thought) return;
       stopListening();
       if (activeVoiceMode === 'actions') {
+        if (['open_browser', 'open_url'].includes(JarvisActionCommands.parse(thought).type)) {
+          runActionCommand(thought);
+          return;
+        }
         const route = matchVoiceRoute(thought, false);
         if (route) {
           runVoiceRoute(route, thought);
@@ -3492,12 +3549,14 @@
         }
         if (activeActionIntent === 'rea') {
           ask('tear down ' + thought);
-          activeActionIntent = 'research';
           return;
         }
-        ask(/^(?:research|investigate|search(?:\s+the\s+)?web\s+for)\b/i.test(thought)
-          ? thought
-          : 'Research ' + thought);
+        if (activeActionIntent === 'research') {
+          ask(/^(?:research|investigate|search(?:\s+the\s+)?web\s+for)\b/i.test(thought)
+            ? thought : 'Research ' + thought);
+          return;
+        }
+        runActionCommand(thought);
         return;
       }
       // The notes mic is intentionally limited to normal knowledge-chat routes.
@@ -3567,9 +3626,14 @@
     }
 
     function micToggle(mode) {
-      activeVoiceMode = mode === 'actions' ? 'actions' : 'notes';
+      const requestedMode = mode === 'actions' ? 'actions' : 'notes';
+      if (wantListening && activeVoiceMode !== requestedMode) {
+        stopListening();
+        startListening(requestedMode);
+        return;
+      }
       if (!wantListening) {
-        startListening(activeVoiceMode);
+        startListening(requestedMode);
         return;
       }
       // Pressing the mic again sends whatever has been heard, immediately.
@@ -3677,34 +3741,303 @@
       return instance;
     }
 
+    const actionsPanel = $('actions-panel');
+    const actionItems = $('action-items');
+    const actionStatus = $('actions-status');
+    const localActions = location.protocol === 'http:' &&
+      (location.hostname === '127.0.0.1' || location.hostname === 'localhost');
+    let actionSnapshot = null;
+    let actionPolling = false;
+    let seenDueReminders = new Set();
+
+    function actionMessage(text, spoken = false) {
+      actionStatus.textContent = text;
+      if (spoken) speak(text);
+    }
+
+    async function actionRequest(payload) {
+      if (!localActions) throw new Error('Tasks and reminders are available only on the local JARVIS server.');
+      const options = payload ? {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Jarvis-Action': '1'},
+        body: JSON.stringify(payload)
+      } : {cache: 'no-store'};
+      const response = await fetch('/actions', options);
+      const data = await response.json();
+      if (response.status === 404 && payload && ['open_browser', 'open_url', 'classify'].includes(payload.operation)) {
+        throw new Error('Restart the local JARVIS server to enable browser actions.');
+      }
+      if (response.status === 409 && payload && payload.operation === 'claim_notification') return {ok: false};
+      if (!response.ok) throw new Error(data.error || 'The item has already changed or no longer exists.');
+      return data;
+    }
+
+    function openActions() {
+      actionsPanel.classList.add('open');
+      actionsPanel.setAttribute('aria-hidden', 'false');
+      if (!localActions) {
+        actionMessage('Tasks and reminders are available only on the local JARVIS server.');
+        return;
+      }
+      refreshActions();
+    }
+
+    function closeActions() {
+      actionsPanel.classList.remove('open');
+      actionsPanel.setAttribute('aria-hidden', 'true');
+    }
+
+    function renderActions(items) {
+      actionItems.replaceChildren();
+      if (!items.length) {
+        const empty = document.createElement('p');
+        empty.textContent = 'No tasks or reminders yet.';
+        actionItems.appendChild(empty);
+        return;
+      }
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'action-item';
+        const title = document.createElement('strong');
+        title.textContent = item.title;
+        const meta = document.createElement('small');
+        const due = item.due_at ? new Date(item.due_at) : null;
+        meta.textContent = (item.kind === 'task' ? 'Task' : 'Reminder') +
+          (item.completed ? ' · ' + (item.kind === 'task' ? 'completed' : 'dismissed') :
+            due ? ' · ' + (due <= new Date() ? 'due ' : 'scheduled ') + due.toLocaleString() : '');
+        row.append(title, meta);
+        const controls = document.createElement('div');
+        controls.className = 'action-item-controls';
+        function button(label, operation) {
+          const element = document.createElement('button');
+          element.type = 'button';
+          element.className = 'ghost-btn';
+          element.textContent = label;
+          element.addEventListener('click', async () => {
+            if (operation === 'delete' && !window.confirm('Delete "' + item.title + '"?')) return;
+            try {
+              await actionRequest({operation, id: item.id});
+              await refreshActions();
+            } catch (error) { actionMessage(error.message); }
+          });
+          controls.appendChild(element);
+        }
+        if (!item.completed) {
+          button(item.kind === 'task' ? 'Complete' : 'Dismiss', item.kind === 'task' ? 'complete' : 'dismiss');
+          const time = document.createElement('input');
+          time.type = 'datetime-local';
+          time.setAttribute('aria-label', 'Postpone ' + item.title + ' until');
+          const postpone = document.createElement('button');
+          postpone.type = 'button';
+          postpone.className = 'ghost-btn';
+          postpone.textContent = 'Postpone';
+          postpone.addEventListener('click', async () => {
+            const dueAt = JarvisActionCommands.localInstant(time.value);
+            if (!dueAt) { actionMessage('Choose a valid local date and time.'); return; }
+            try {
+              await actionRequest({operation: 'postpone', id: item.id, due_at: dueAt});
+              await refreshActions();
+            } catch (error) { actionMessage(error.message); }
+          });
+          controls.append(time, postpone);
+        }
+        button('Delete', 'delete');
+        row.appendChild(controls);
+        actionItems.appendChild(row);
+      }
+    }
+
+    async function refreshActions() {
+      if (!localActions || actionPolling) return;
+      actionPolling = true;
+      try {
+        const data = await actionRequest();
+        const due = data.items.filter((item) => item.kind === 'reminder' && !item.completed &&
+          item.due_at && new Date(item.due_at) <= new Date());
+        const changedDue = due.length !== seenDueReminders.size || due.some((item) => !seenDueReminders.has(item.id));
+        if (changedDue || JSON.stringify(actionSnapshot) !== JSON.stringify(data.items)) renderActions(data.items);
+        actionSnapshot = data.items;
+        if (due.length) {
+          actionMessage(due.length + ' reminder' + (due.length === 1 ? ' is' : 's are') + ' due. Open tasks and reminders to dismiss.');
+          if (due.some((item) => !seenDueReminders.has(item.id))) {
+            actionsPanel.classList.add('open');
+            actionsPanel.setAttribute('aria-hidden', 'false');
+          }
+        }
+        seenDueReminders = new Set(due.map((item) => item.id));
+        if ('Notification' in window && Notification.permission === 'granted') {
+          for (const item of due.filter((entry) => !entry.notified)) {
+            try {
+              const claim = await actionRequest({operation: 'claim_notification', id: item.id});
+              if (claim.ok) new Notification('JARVIS reminder', {body: item.title, tag: item.id});
+            } catch (error) {
+              actionMessage('Reminder notification could not be delivered: ' + error.message);
+            }
+          }
+        }
+      } catch (error) {
+        actionMessage('Could not load tasks and reminders: ' + error.message);
+      } finally {
+        actionPolling = false;
+      }
+    }
+
+    async function runActionCommand(text) {
+      const clean = String(text).replace(/^\s*(?:(?:hey|hello)\s+)?jarvis[\s,.:!]*/i, '');
+      if (handleTeardownText(clean)) return;
+      let command = JarvisActionCommands.parse(text);
+      if (command.type === 'research') { ask(command.text); return; }
+      if (command.type === 'unknown' && localActions) {
+        try {
+          setBusy(true);
+          const result = await actionRequest({operation: 'classify', text});
+          command = result.action;
+        } catch (error) {
+          const message = error.message + ' Please specify an action, such as “open apple.com”.';
+          toast(message);
+          speak(message);
+          return;
+        } finally {
+          setBusy(false);
+        }
+      }
+      if (command.type === 'open_browser' || command.type === 'open_url') {
+        if (!localActions) {
+          const message = 'Opening a browser is available only on the local JARVIS server.';
+          toast(message);
+          speak(message);
+          return;
+        }
+        const label = command.browser === 'default' ? 'your default browser' : command.browser;
+        const target = command.type === 'open_url' ? command.url : '';
+        if (!window.confirm('Open ' + (target ? target + ' in ' : (command.new_tab ? 'a new tab in ' : '')) + label + ' on this computer?')) {
+          toast('Browser action cancelled.');
+          return;
+        }
+        try {
+          const payload = {operation: command.type, browser: command.browser, new_tab: command.new_tab, confirmed: true};
+          if (target) payload.url = target;
+          await actionRequest(payload);
+          const message = target ? 'Requested ' + target + ' in ' + label + '.' : command.new_tab ? 'Requested a new tab in ' + label + '.' : 'Started ' + label + '.';
+          toast(message);
+          speak(message);
+        } catch (error) {
+          toast(error.message);
+          speak(error.message);
+        }
+        return;
+      }
+      if (command.type === 'unknown' || command.type === 'clarify') {
+        const message = 'Please specify an action, such as “open apple.com”, “open Firefox”, or “add task”.';
+        toast(message);
+        speak(message);
+        return;
+      }
+      openActions();
+      if (!localActions) return;
+      try {
+        if (command.type === 'list') {
+          const data = await actionRequest();
+          const items = data.items.filter((item) => item.kind === command.kind && !item.completed);
+          actionMessage(items.length ? items.map((item) => item.title).join(', ') : 'No active ' + command.kind + 's.', true);
+        } else if (command.type === 'create') {
+          if (command.kind === 'reminder' && !command.due_at) throw new Error('Please provide a valid reminder time.');
+          await actionRequest({operation: 'create', kind: command.kind, title: command.title, due_at: command.due_at});
+          await refreshActions();
+          actionMessage((command.kind === 'task' ? 'Task' : 'Reminder') + ' added: ' + command.title, true);
+        } else {
+          const data = await actionRequest();
+          const matches = data.items.filter((item) => item.kind === 'task' && !item.completed &&
+            item.title.toLocaleLowerCase() === command.title.toLocaleLowerCase());
+          if (matches.length !== 1) throw new Error(matches.length ? 'More than one task has that title; use the list to choose one.' : 'No active task has that exact title.');
+          if (command.type === 'postpone' && !command.due_at) throw new Error('Please provide a valid postponement duration.');
+          await actionRequest({operation: command.type, id: matches[0].id, due_at: command.due_at});
+          await refreshActions();
+          actionMessage('Task ' + (command.type === 'complete' ? 'completed: ' : 'postponed: ') + matches[0].title, true);
+        }
+      } catch (error) { actionMessage(error.message, true); }
+    }
+
+    $('action-command-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const input = $('action-command');
+      const text = input.value.trim();
+      if (text) { input.value = ''; runActionCommand(text); }
+    });
+    $('action-create-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const kind = $('action-kind').value;
+      const value = $('action-time').value;
+      const dueAt = value ? JarvisActionCommands.localInstant(value) : null;
+      if ((value && !dueAt) || (kind === 'reminder' && !dueAt)) {
+        actionMessage('Choose a valid local date and time.');
+        return;
+      }
+      try {
+        await actionRequest({operation: 'create', kind, title: $('action-title').value, due_at: dueAt});
+        $('action-title').value = '';
+        $('action-time').value = '';
+        await refreshActions();
+        actionMessage('Item added.');
+      } catch (error) { actionMessage(error.message); }
+    });
+    $('actions-close').addEventListener('click', closeActions);
+    $('action-notifications').addEventListener('click', async () => {
+      if (!('Notification' in window)) { actionMessage('Notifications are unavailable in this browser.'); return; }
+      try {
+        const permission = await Notification.requestPermission();
+        actionMessage(permission === 'granted' ? 'Notifications enabled while JARVIS is open.' : 'Notifications are not enabled; due reminders remain visible here.');
+        if (permission === 'granted') refreshActions();
+      } catch (error) { actionMessage('Could not enable notifications: ' + error.message); }
+    });
+
     voiceBtn.addEventListener('click', () => micToggle('notes'));
 
     const commandBtn = $('command-btn');
     const commandMenu = $('command-menu');
     commandBtn.addEventListener('click', (event) => {
       event.stopPropagation();
-      if (wantListening) {
+      if (wantListening && activeVoiceMode === 'actions') {
         micToggle('actions');
         return;
       }
+      if (wantListening) stopListening();
       commandMenu.classList.toggle('open');
       commandBtn.setAttribute('aria-expanded', String(commandMenu.classList.contains('open')));
     });
     $('command-research').addEventListener('click', () => {
       commandMenu.classList.remove('open');
+      commandBtn.setAttribute('aria-expanded', 'false');
       activeActionIntent = 'research';
       micToggle('actions');
     });
+    $('command-actions').addEventListener('click', () => {
+      commandMenu.classList.remove('open');
+      commandBtn.setAttribute('aria-expanded', 'false');
+      activeActionIntent = 'actions';
+      micToggle('actions');
+    });
+    $('command-manage').addEventListener('click', () => {
+      commandMenu.classList.remove('open');
+      commandBtn.setAttribute('aria-expanded', 'false');
+      openActions();
+    });
     $('command-rea').addEventListener('click', () => {
       commandMenu.classList.remove('open');
+      commandBtn.setAttribute('aria-expanded', 'false');
       activeActionIntent = 'rea';
       micToggle('actions');
     });
     document.addEventListener('click', (event) => {
       if (!commandMenu.contains(event.target) && event.target !== commandBtn) {
         commandMenu.classList.remove('open');
+        commandBtn.setAttribute('aria-expanded', 'false');
       }
     });
+    if (localActions) {
+      refreshActions();
+      window.setInterval(refreshActions, 15000);
+    }
 
     $('research-close').addEventListener('click', () => {
       $('research-card').classList.remove('open');

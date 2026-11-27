@@ -1,5 +1,11 @@
 # Live Web Research Implementation
 
+## Local action hub — phase 1
+- Added explicit action routing alongside the existing notes mic and REA/research modes.
+- Added local tasks and one-time reminders, browser notifications and missed-reminder display.
+- Added persistent SQLite storage, same-origin local API checks and focused offline tests.
+- Later roadmap phases (workspace controls, memory, integrations and automation) remain unimplemented.
+
 ## Status
 - [x] Intent detection and voice routing
 - [x] DuckDuckGo, SearXNG and Wikipedia provider abstraction

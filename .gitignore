@@ -2,6 +2,8 @@
 config.json
 config.local.json
 research.sqlite3
+jarvis_actions.sqlite3
+jarvis_actions.sqlite3-journal
 .env
 .env.*
 !.env.example

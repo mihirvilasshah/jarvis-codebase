@@ -210,6 +210,62 @@ search-source evidence explicitly as an sources-only fallback. It never fabricat
 Set `SEARXNG_URL` to a self-hosted SearXNG instance to add that provider. Research sessions are
 stored in `research.sqlite3`; full webpages are not persisted.
 
+## Local actions, tasks and reminders
+
+Start the local server with `python server.py` and open
+<http://127.0.0.1:4700>. The HUD action button offers **Voice actions** and
+**Tasks and reminders**; the chat microphone remains for asking the notes.
+The existing Web Speech recognition is reused, and browser support and
+network requirements vary. The action panel also accepts typed commands:
+
+- `Add task buy coffee`
+- `List my tasks` or `Complete task buy coffee`
+- `Postpone task buy coffee by 2 hours` (from now)
+- `Remind me in 20 minutes to call` or `Remind me to call tomorrow at 3 pm`
+- `Open Firefox`, `Open Chrome`, `Open Edge`, `Open a browser`, or
+  `Open a new tab` (Windows only; confirmation required). A generic browser
+  or tab command uses the Windows default browser, if it is Firefox, Chrome,
+  or Edge; say `Open a new tab in Firefox` to choose one explicitly.
+- `Open apple.com in a new tab`, `Open apple dot com`, or
+  `Visit https://apple.com/mac in Firefox`. Website navigation requires the
+  same confirmation and browser support; the browser controls which window
+  receives the tab, so the current window is not guaranteed.
+- `Research solid-state batteries` or `Tear down example.com`
+
+Common browser and website commands work without an AI model. For other
+wording, the optional local Ollama model configured above can classify browser
+actions; it must use a loopback `OLLAMA_BASE_URL` and a model already installed
+in Ollama. The local server must be restarted after changing these variables.
+If Ollama is unavailable or its output is invalid, JARVIS reports the error
+and asks for an explicit command. The model cannot supply an address: the
+address must appear in your request. Only validated HTTP(S) addresses are
+accepted, and confirmation is always required. This classifier does not
+perform arbitrary computer control.
+
+Task titles must match exactly for voice completion/postponement; duplicate
+titles must be selected in the panel. Use the date/time picker for explicit
+local dates. One-time reminders are stored in UTC and displayed in the
+browser's local time; invalid and past times are rejected. The panel supports
+adding, completing, postponing and deleting tasks, and adding, postponing,
+dismissing and deleting reminders. Ambiguous commands ask for clarification
+rather than starting a web search.
+
+Items are stored unencrypted in the Git-ignored `jarvis_actions.sqlite3` on
+the local server. Due reminders appear in the panel while it is open or when
+you return; optional browser notifications require permission. Notifications
+cannot be delivered while JARVIS is closed, and no background service is
+installed. Browser notifications may still be suppressed by OS/browser
+settings. Task, reminder, and browser actions are local-only and are
+unavailable on the hosted Vercel site.
+
+Run the offline checks:
+
+```powershell
+python -m unittest tests_actions.py tests_research.py
+node tests_action_commands.js
+python -m py_compile actions.py action_router.py server.py
+```
+
 ## The Bay - REA website observation
 
 Jarvis can observe public websites with [REA](https://github.com/morluto/rea)

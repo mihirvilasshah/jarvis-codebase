@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 import brain
 import build
 import research
+import actions
+import action_router
 
 # The gateway occasionally takes longer than its default 45 s under load.
 brain.REQUEST_TIMEOUT = 120
@@ -395,7 +397,17 @@ HOST = "127.0.0.1"
 # PORT=0 means "any free port" to the OS; this server always wants 4700.
 PORT = int(os.environ.get("KG_PORT") or os.environ.get("PORT") or "4700") or 4700
 MAX_BODY_BYTES = 64 * 1024
+ACTION_STORE = None
+ACTION_STORE_LOCK = threading.Lock()
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+
+
+def action_store():
+    global ACTION_STORE
+    with ACTION_STORE_LOCK:
+        if ACTION_STORE is None:
+            ACTION_STORE = actions.ActionStore()
+        return ACTION_STORE
 
 
 TEARDOWN_SYSTEM = """You are Jarvis, the butler of a knowledge galaxy, writing a teardown of a website.
@@ -709,6 +721,19 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(VIEWER), **kwargs)
 
+    def _action_origin_allowed(self, require_origin=False) -> bool:
+        host = self.headers.get("Host", "").lower()
+        port = self.server.server_port
+        allowed = {f"localhost:{port}", f"127.0.0.1:{port}"}
+        if host not in allowed:
+            return False
+        origin = self.headers.get("Origin")
+        if require_origin and not origin:
+            return False
+        if origin and origin.lower() != "http://" + host:
+            return False
+        return self.headers.get("Sec-Fetch-Site", "same-origin") in ("same-origin", "none")
+
     def _cors(self) -> None:
         origin = self.headers.get("Origin")
         host = self.headers.get("Host")
@@ -733,7 +758,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
-        if self.path in ("/", "/index.html") or self.path.endswith(("graph-data.js", "graph.json")):
+        if self.path in ("/", "/index.html") or urlparse(self.path).path.endswith(("graph-data.js", "graph.json", "action-commands.js")):
             self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
@@ -748,6 +773,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path == "/actions":
+            if not self._action_origin_allowed():
+                self._json(403, {"error": "Local actions require a same-origin request."})
+                return
+            try:
+                self._json(200, {"items": action_store().list_items()})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"error": "Could not read local actions."})
+            return
         if path == "/research/history":
             self._json(200, {"ok": True, "items": research.STORE.list()})
             return
@@ -861,9 +896,20 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see", "/research", "/research/history", "/research/save", "/research/delete", "/research/export"):
+        if path == "/api/research":
+            path = "/research"
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see", "/research", "/research/history", "/research/save", "/research/delete", "/research/export", "/actions"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
+
+        if path == "/actions":
+            if (not self._action_origin_allowed(require_origin=True)
+                    or self.headers.get("X-Jarvis-Action") != "1"):
+                self._json(403, {"error": "Local actions require a same-origin request."})
+                return
+            if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+                self._json(415, {"error": "Local actions require JSON."})
+                return
 
         try:
             length = int(self.headers.get("Content-Length", "0") or "0")
@@ -927,6 +973,43 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/actions":
+            try:
+                operation = payload.get("operation")
+                if operation == "classify":
+                    self._json(200, {"ok": True, "action": action_router.classify(payload.get("text"))})
+                elif operation in ("open_firefox", "open_browser", "open_url"):
+                    if payload.get("confirmed") is not True:
+                        self._json(400, {"error": "Confirm before opening a browser."})
+                        return
+                    if operation == "open_firefox":
+                        actions.launch_firefox()
+                    elif operation == "open_url":
+                        url = actions.validate_web_url(payload.get("url"))
+                        actions.launch_browser(payload.get("browser"), payload.get("new_tab"), url)
+                    else:
+                        actions.launch_browser(payload.get("browser"), payload.get("new_tab"))
+                    self._json(200, {"ok": True})
+                elif operation == "create":
+                    item_id = action_store().create(payload.get("kind"), payload.get("title"), payload.get("due_at"))
+                    self._json(201, {"ok": True, "id": item_id})
+                else:
+                    changed = action_store().update(payload.get("id"), operation, payload.get("due_at"))
+                    self._json(200 if changed else 409, {"ok": changed})
+            except ValueError as exc:
+                self._json(400, {"error": str(exc)})
+            except FileNotFoundError as exc:
+                self._json(503, {"error": str(exc)})
+            except RuntimeError as exc:
+                self._json(503, {"error": str(exc)})
+            except OSError:
+                traceback.print_exc()
+                self._json(500, {"error": "The browser could not be opened."})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"error": "Could not update local actions."})
             return
 
         if path == "/research":
