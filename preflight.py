@@ -1128,8 +1128,9 @@ def check_teardown_compose(ctx: Context) -> Outcome:
     if not str(data.get("snapshot") or "") or not Path(data["snapshot"]).exists():
         raise CheckFailure("the teardown snapshot was not saved")
     notes = data.get("notes") if isinstance(data.get("notes"), list) else []
+    note_file = str(data.get("note_file") or "")
     labels = [str(item.get("label", "")) for item in notes if isinstance(item, dict)]
-    if not any(label.lower().startswith("teardown") for label in labels):
+    if not any(label.lower().startswith("teardown") for label in labels) and "teardowns/" not in note_file.replace("\\", "/"):
         raise CheckFailure("the teardown note was not born")
     if not any(label == "REA" for label in labels):
         status_graph, _, graph_body = request(
@@ -1149,6 +1150,103 @@ def check_teardown_compose(ctx: Context) -> Outcome:
         f"1 busy refusal · SPOKEN written · {len(notes)} notes born · "
         f"note {Path(note_file).name} · digest {len(digest)} chars",
     )
+
+
+def check_teardown_routes(ctx: Context) -> Outcome:
+    try:
+        import teardown as kg
+    except Exception as exc:
+        raise CheckFailure(f"teardown.py could not be imported: {exc}")
+    chrome = kg.find_chrome()
+    if not chrome:
+        raise CheckFailure("Chrome was not found for the route check")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    profile = Path(tempfile.mkdtemp(prefix="kg-routes-"))
+    proc = subprocess.Popen(
+        [
+            chrome,
+            "--headless=new",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={profile}",
+            ctx.base_url + "/?mute=1&debug=1",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    client = None
+    try:
+        deadline = time.time() + 25
+        targets = None
+        while time.time() < deadline:
+            targets = kg._http_json(f"http://127.0.0.1:{port}/json/list", timeout=1.0)
+            if isinstance(targets, list) and any(
+                isinstance(item, dict) and item.get("type") == "page" for item in targets
+            ):
+                break
+            time.sleep(0.25)
+        page = next(
+            (item for item in (targets or []) if isinstance(item, dict) and item.get("type") == "page"),
+            None,
+        )
+        if not page:
+            raise CheckFailure("the route-check browser did not expose a page")
+        client = kg.CDPClient(str(page["webSocketDebuggerUrl"]), timeout=25).connect()
+        while time.time() < deadline:
+            if client.evaluate("typeof window.__kgRouteCheck === 'function'") is True:
+                break
+            time.sleep(0.25)
+        sentences = [
+            "reverse engineer igloo dot inc",
+            "tear down linear.app",
+            "how does stripe.com do that",
+            "what is example.com built with",
+            "this site",
+            "this page",
+            "Tear down the old shed",
+            "how should I reverse engineer my pricing",
+            "reverse engineer Stripe's homepage",
+            "show me the last teardown",
+            "open the full teardown",
+            "cancel the teardown",
+        ]
+        expected = [
+            "teardown-live", "teardown-live", "teardown-live", "teardown-live",
+            "teardown-this", "teardown-this", None, None, None,
+            "teardown-last", "teardown-open", "teardown-cancel",
+        ]
+        expression = (
+            "JSON.stringify(" + json.dumps(sentences) + ".map(t => window.__kgRouteCheck(t)))"
+        )
+        raw = client.evaluate(expression)
+        actual = json.loads(raw) if isinstance(raw, str) else None
+        if not isinstance(actual, list):
+            raise CheckFailure("the browser did not return route results")
+        wrong = [
+            f"{sentence!r} -> {got!r} (wanted {want!r})"
+            for sentence, got, want in zip(sentences, actual, expected)
+            if got != want
+        ]
+        if wrong:
+            raise CheckFailure("; ".join(wrong))
+        muted = client.evaluate("new URLSearchParams(location.search).get('mute')")
+        if muted != "1":
+            raise CheckFailure("the route check was not run in a ?mute=1 tab")
+        return Outcome("pass", "12/12 routes matched in a ?mute=1 tab · site, this, negatives, panel routes")
+    finally:
+        if client is not None:
+            client.close()
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        shutil.rmtree(profile, ignore_errors=True)
 
 
 def check_teardown_law(ctx: Context) -> Outcome:
@@ -1259,6 +1357,7 @@ CHECKS = [
     ("Teardown owns a fresh browser and observes read-only", check_teardown_observe),
     ("Teardown captures labelled five-step evidence", check_teardown_evidence),
     ("Teardown composes a brain-written note with one-at-a-time guard", check_teardown_compose),
+    ("Voice routes trigger only for named sites and panel commands", check_teardown_routes),
     ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 

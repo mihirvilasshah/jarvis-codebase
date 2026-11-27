@@ -15,201 +15,195 @@ const GRAPH = {
     },
     {
       "id": 2,
-      "label": "Threejs.org 2026 11 27",
+      "label": "Example.com 2026 11 27",
       "group": "Teardowns",
-      "excerpt": "Teardown · threejs.org Verdict: A high-fidelity, modular 3D viewer demonstrating GLTF asset loading and PBR lighting. The answer The page is a Three.js example that loads a GLTF model and an HDR environment map to create realistic lighting and reflections. The stack 3D Engine: Three.js r187 (Evidence: const REVISION = '187' in three.core.js) Model Loader: GLTFLoader (Evidence: GLTFLoader.js script and DRACOLoader string) Environment Loader: UltraHDRLoader (Evidence: UltraHDRLoader.js script) Controls: OrbitControls (Evidence: OrbitControls.js script) GUI: lil-gui (Evidence: lil-gui.module.min.js script) How the effect works The browser loads the core Three.js engine (three.core.js and…"
+      "excerpt": "Teardown · example.com Verdict: A minimal static placeholder with no functional complexity. The answer The site is a static informational page with no backend logic, no third-party dependencies, and no complex frontend architecture. The stack 3D engine: None found (Evidence: found=False) Animation: None found (Evidence: found=False) Smooth scroll: None found (Evidence: found=False) Visual effects: None found (Evidence: found=False) Compression: None found (Evidence: found=False) Build tools: None found (Evidence: found=False) How the effect works The browser requests the main HTML document from the root path. The browser parses the HTML and identifies a single script tag pointing to a local…"
     },
     {
       "id": 3,
+      "label": "Threejs.org 2026 11 27",
+      "group": "Teardowns",
+      "excerpt": "Teardown · threejs.org Verdict: A standard, unminified Three.js example page demonstrating glTF loading with HDR lighting. The answer The page is a WebGL demo that loads a glTF model and applies an HDR environment map for realistic lighting. The stack 3D Engine: Three.js (r187) - Evidence: Licence banner and REVISION constant in three.core.js. Compression: DRACOLoader - Evidence: String found in captured code. Controls: OrbitControls - Evidence: Script load and REA dependency graph. GUI: lil-gui - Evidence: Script load. How the effect works The browser loads the Three.js core and module scripts. GLTFLoader is initialized to fetch the model definition from raw.githubusercontent.com…"
+    },
+    {
+      "id": 4,
       "label": "Business Overview",
       "group": "Company",
       "excerpt": "Business Overview Northwind Roasters is a specialty coffee roastery and café at 418 NE Alberta Street in Portland, Oregon. We opened in March 2019 and currently employ 12 people: 5 full-time and 7 part-time. The business has two revenue lines. Retail café sales make up about 62% of revenue, and wholesale coffee sales to local restaurants, offices, and grocers make up the remaining 38%. Our 2026 revenue target is $1.18M. We roast in small batches on a 12 kg Probat and sell whole bean coffee online and at the café. Our differentiator is transparent sourcing: every bag lists the farm, region, altitude, and processing method. Key relationships: Bean Sourcing covers our importers, Wholesale…"
     },
     {
-      "id": 4,
+      "id": 5,
       "label": "Mission and Values",
       "group": "Company",
       "excerpt": "Mission and Values Our mission is to make exceptional coffee feel approachable, while paying farmers and staff fairly. Values: Craft first. We cup every roast before it reaches a customer. See Cupping Notes. Radical transparency. We publish origin details and roast dates. Packaging and Labels explains the labels. Neighbourhood hospitality. We learn regulars' names and support local makers. Sustainable by default. We use compostable retail bags, recycle chaff, and discount drinks for customers with reusable cups. Decision rules: If a change lowers quality, we do not ship it. Staff safety and fair scheduling come before sales targets. See Shift Scheduling. We test small before committing…"
     },
     {
-      "id": 5,
+      "id": 6,
       "label": "Team Directory",
       "group": "Company",
       "excerpt": "Team Directory Northwind Roasters has 12 employees. Leadership meets Mondays at 9:00 a.m. Maya Chen — Owner and Head Roaster. Owns Roasting Schedule, green coffee buying, and Bean Sourcing. Jonah Reed — General Manager. Owns Shift Scheduling, Opening and Closing Checklist, and daily café operations. Priya Nair — Finance and Operations Lead. Owns 2026 Budget, Payroll Schedule, and Bookkeeping Checklist. Luis Ortega — Wholesale Manager. Owns Wholesale Outreach and Wholesale Order Fulfillment. Elena Rossi — Marketing and Community Lead. Owns Instagram Content Calendar, Loyalty Program, and Farmers Market Plan. Sam Okafor — Lead Barista and Trainer. Owns Barista Training and Coffee Menu…"
     },
     {
-      "id": 6,
+      "id": 7,
       "label": "Location and Hours",
       "group": "Company",
       "excerpt": "Location and Hours Address: 418 NE Alberta Street, Portland, OR 97211. Phone: (503) 555-0148. Email: hello@northwindroasters.com. Café hours: Monday–Friday: 7:00 a.m.–5:00 p.m. Saturday–Sunday: 8:00 a.m.–4:00 p.m. Closed Thanksgiving, Christmas Day, and New Year's Day. Roastery production runs Tuesday–Thursday, 6:00 a.m.–2:00 p.m. Wholesale pickup is available weekdays from 8:00 a.m. to 3:00 p.m.; see Wholesale Order Fulfillment. The space is 1,850 sq ft: 1,100 sq ft café, 450 sq ft roastery, and 300 sq ft storage. Lease runs through June 2029 with one five-year renewal option. Rent is $4,850 per month and is listed in 2026 Budget. Parking is street-only. The #17 bus stops one block away…"
     },
     {
-      "id": 7,
+      "id": 8,
       "label": "Licenses and Insurance",
       "group": "Company",
       "excerpt": "Licenses and Insurance Compliance owner: Priya Nair. The renewal calendar is reviewed in the first week of each quarter. Oregon business registration: active, renewal every two years. Portland business license: annual, due January 31. Multnomah County food service license: annual, inspected each spring. Current score: 98. OLCC permit: allows beer and wine service until 9:00 p.m.; staff training required. Health permits and weights-and-measures certification for the roastery scale. Employer identification number and payroll registrations are on file with Payroll Schedule. Insurance: General liability: $2M per occurrence, $4M aggregate. Commercial property and equipment: replacement cost…"
     },
     {
-      "id": 8,
+      "id": 9,
       "label": "2026 Budget",
       "group": "Finance",
       "excerpt": "2026 Budget Prepared by Priya Nair. Approved by Maya Chen on December 12, 2025. The plan targets $1.18M in revenue and a 9% net margin. Revenue plan: Café retail: $732,000 (62%) Wholesale: $448,000 (38%) Events and classes: included in café retail Major expenses: Cost of goods sold: $401,000 (34% of revenue) Payroll and benefits: $354,000 (30%) Rent: $58,200 Utilities and internet: $21,600 Marketing: $24,000 Equipment maintenance: $9,000 Insurance and licenses: $14,400 Software and card fees: $18,000 Capital plan: $35,000 for a used delivery van and $8,000 for café seating. We will fund the van from cash flow, not debt. See Cash Flow and Runway for the monthly view and Pricing and Margins…"
     },
     {
-      "id": 9,
+      "id": 10,
       "label": "Cash Flow and Runway",
       "group": "Finance",
       "excerpt": "Cash Flow and Runway We keep a minimum operating balance of $60,000 in the business checking account. As of November 1, 2026, the balance is $84,200 and there is a $25,000 undrawn line of credit. Monthly fixed costs are about $38,500: rent $4,850, payroll $29,500, utilities $1,800, software $1,500, and insurance $850. Variable costs are roughly 34% of sales. Cash rhythm: Wholesale invoices are net 15. About 70% of accounts pay on time. Café card settlements arrive in two business days. Green coffee is paid 50% deposit at contract and 50% before shipment. Payroll runs on the 15th and last business day; see Payroll Schedule. Runway rule: if cash falls below $60,000, pause non-essential…"
     },
     {
-      "id": 10,
+      "id": 11,
       "label": "Pricing and Margins",
       "group": "Finance",
       "excerpt": "Pricing and Margins Our target gross margin is 68% on retail drinks and 45% on wholesale beans. Prices are reviewed every January and after any green coffee increase above 8%. Retail pricing logic: 12 oz latte: $5.25. Cost is $1.55, margin 70%. 16 oz drip: $3.50. Cost is $0.72, margin 79%. 12 oz retail beans: $19.00. Cost is $9.10, margin 52%. Pastry: 55% margin; we bake in-house on weekends. Wholesale pricing: 5 lb bag: $62.00. 25 lb case: $285.00. Accounts ordering 100+ lb per month receive 8% off. Delivery is free within 5 miles; otherwise $12 per drop. Discounts: staff get 50% off drinks and 30% off beans. Loyalty rewards are tracked separately in Loyalty Program. Never discount below…"
     },
     {
-      "id": 11,
+      "id": 12,
       "label": "Payroll Schedule",
       "group": "Finance",
       "excerpt": "Payroll Schedule Payroll is processed by Priya Nair through Gusto. Employees are paid semi-monthly on the 15th and the last business day of the month. Key dates: Timesheets are due to Jonah by 5:00 p.m. two business days before payday. Priya approves payroll one business day before payday. Direct deposits post by 9:00 a.m. on payday. Rates and rules: Portland minimum wage applies to all hourly staff; tipped baristas earn an additional tip pool share. Overtime must be approved in writing by Jonah before it is worked. See Shift Scheduling. Tips are pooled weekly and distributed by hours worked. Mileage for wholesale deliveries is reimbursed at the IRS rate; submit receipts within 30 days…"
     },
     {
-      "id": 12,
+      "id": 13,
       "label": "Bookkeeping Checklist",
       "group": "Finance",
       "excerpt": "Bookkeeping Checklist Priya Nair owns bookkeeping with support from our contract bookkeeper, Dana Whitfield. Books close on the 5th of the following month. Weekly: Reconcile Square deposits to the bank account. Enter wholesale invoices and mark payments received. File receipts in the shared drive by vendor and month. Review uncategorized expenses. Monthly: Reconcile the credit card and line of credit. Record payroll journal entries from Gusto; tie to Payroll Schedule. Review inventory counts with Maya; see Inventory Reorder Points. Compare actuals to 2026 Budget and flag variances over $500. Send wholesale statements and follow up on invoices over 30 days. Quarterly: File and pay Oregon CAT…"
     },
     {
-      "id": 13,
+      "id": 14,
       "label": "Brand Voice Guide",
       "group": "Marketing",
       "excerpt": "Brand Voice Guide Northwind sounds warm, curious, and plainspoken. We are coffee experts, not coffee snobs. Voice principles: Specific over flowery. Say \"washed Ethiopian, notes of peach and jasmine\" instead of \"a journey of flavor.\" Short sentences. One idea per sentence. Invite, don't lecture. Explain brewing simply and link to a guide. Local and human. Name neighbours, makers, and staff when appropriate. Words we use: bright, sweet, balanced, cozy, everyday, small-batch, transparent. Words we avoid: artisanal, curated, elevated, disrupt, guilt-free. Formatting: Instagram captions start with a concrete image, then one useful detail, then a question. Emails sign off with \"See you at the…"
     },
     {
-      "id": 14,
+      "id": 15,
       "label": "Instagram Content Calendar",
       "group": "Marketing",
       "excerpt": "Instagram Content Calendar Elena Rossi runs @northwindroasters with support from Sam. Goal: 4 posts and 3 stories per week, focused on education, people, and new coffee. Weekly rhythm: Monday: menu or new coffee photo. Pair with Coffee Menu. Wednesday: behind-the-scenes reel — roasting, cupping, or packing. See Roasting Schedule. Friday: staff or customer story. Tag with permission. Saturday: brewing tip or event reminder. Link to Farmers Market Plan when relevant. Stories: daily coffee special, poll, and repost of tagged photos. Monthly: First week: origin spotlight from Bean Sourcing. Third week: loyalty program reminder; see Loyalty Program. Last week: review insights, save…"
     },
     {
-      "id": 15,
+      "id": 16,
       "label": "Loyalty Program",
       "group": "Marketing",
       "excerpt": "Loyalty Program The Northwind Regulars program launched in 2024 and has 1,840 active members. It runs on Square Loyalty. How it works: Earn 1 point per $1 spent in the café. 100 points = one free 12 oz drink. Double points on Mondays and on reusable-cup purchases. Birthday reward: any drink, valid for 14 days. Bean subscribers earn 2 points per $1 and free local delivery. Costs and controls: Reward redemption is about 4.2% of café sales, within the 5% budget in 2026 Budget. Staff must scan the customer's number before applying a reward. No manual points. Fraud checks monthly: duplicate accounts, unusual point bursts, and expired rewards. Growth plan: Add a \"bring a friend\" referral in Q1…"
     },
     {
-      "id": 16,
+      "id": 17,
       "label": "Wholesale Outreach",
       "group": "Marketing",
       "excerpt": "Wholesale Outreach Luis Ortega owns wholesale growth. Target: add 12 accounts in 2026, with an average of 35 lb per month. Ideal accounts: independent cafés, co-working spaces, boutique hotels, and offices within 8 miles of the roastery. Avoid accounts that need same-day delivery or exclusive menu control. Outreach sequence: Visit in person with a 12 oz sample and a one-page wholesale sheet. Follow up by email within 48 hours with pricing and a brew guide. Offer a paid tasting at their location or ours. Send a two-week trial at 10% off; no free cases. On close, schedule first delivery and training. Pipeline is tracked in the shared CRM sheet: lead, sampled, trial, active, paused. Review…"
     },
     {
-      "id": 17,
+      "id": 18,
       "label": "Farmers Market Plan",
       "group": "Marketing",
       "excerpt": "Farmers Market Plan We attend the Alberta Street Market on the second and fourth Saturdays, May through October, 9:00 a.m.–2:00 p.m. Booth fee is $55 per market. Setup: 10x10 tent, two tables, banner, and menu board. Batch brew in 3 dispensers: drip, decaf, and a seasonal option from Seasonal Drinks. Retail bags: 40 units of two origins, plus a 2 lb option. See Coffee Menu. Card reader with offline mode, cash drawer with $150, and QR code for Loyalty Program. Sampling cups and a water station. Staffing: two people per market, scheduled in Shift Scheduling. One must be a lead barista. Goals: $900 average sales, 60 email sign-ups, and 15 new loyalty members per market. Track sales, sign-ups…"
     },
     {
-      "id": 18,
+      "id": 19,
       "label": "Roasting Schedule",
       "group": "Operations",
       "excerpt": "Roasting Schedule Maya Chen roasts Tuesday through Thursday, 6:00 a.m.–2:00 p.m. The 12 kg Probat is warmed for 20 minutes before the first batch. Weekly plan: Tuesday: wholesale base coffees. 3 batches of Horizon Blend, 2 of Decaf Moon. Wednesday: retail single origins. Rotate according to Cupping Notes and Bean Sourcing. Thursday: wholesale top-ups and online orders. Roast-to-order cut-off is 10:00 a.m. Rules: Minimum batch is 6 kg; maximum is 11 kg for a 12 kg drum. Rest coffee 3–5 days before retail sale and 5–7 days before espresso service. Record charge weight, drop temperature, development time, and roast date for every batch. Bag and label within 24 hours; see Packaging and Labels…"
     },
     {
-      "id": 19,
+      "id": 20,
       "label": "Inventory Reorder Points",
       "group": "Operations",
       "excerpt": "Inventory Reorder Points Maya and Jonah review inventory every Monday at 8:30 a.m. Counts are kept in the shared inventory sheet. Reorder when stock hits the point below. Green coffee: Horizon Blend components: 60 lb Decaf Moon: 30 lb Rotating single origin: 40 lb Retail and café: 12 oz bags: 500 units 2 lb bags: 100 units 12 oz cups and lids: 2,000 each 16 oz cups and lids: 1,500 each Oat milk: 24 cartons Whole milk: 18 gallons Vanilla and caramel syrup: 12 bottles each Pastries: daily par by 2:00 p.m. Cleaning and supplies: reorder at two weeks of cover. Do not stock more than six weeks of green coffee; cash is tight and freshness matters. Lead times are 7–10 days for packaging and 3–4…"
     },
     {
-      "id": 20,
+      "id": 21,
       "label": "Wholesale Order Fulfillment",
       "group": "Operations",
       "excerpt": "Wholesale Order Fulfillment Luis Ortega owns wholesale accounts. Orders arrive by email or the wholesale order form before 10:00 a.m. Tuesday for Thursday delivery. Fulfillment steps: Confirm the order and delivery window within two hours. Check roast availability against Roasting Schedule. Pull, weigh, and label cases. Include a roast-date sticker and brew guide. Pack 5 lb bags in cases of five; use the compostable liners in Packaging and Labels. Print the invoice and packing slip. Payment terms are net 15. Load the van by route. Deliveries run Thursday 11:00 a.m.–3:00 p.m. Send delivery confirmation and a one-line brew tip. Account standards: Minimum opening order is 20 lb. Free delivery…"
     },
     {
-      "id": 21,
+      "id": 22,
       "label": "Equipment Maintenance",
       "group": "Operations",
       "excerpt": "Equipment Maintenance Jonah Reed owns the maintenance calendar. Log every service in the equipment binder and the shared sheet. Daily: Backflush the espresso machine at close. Clean grinder hoppers and purge burrs. Wipe the Probat cooling tray and check the chaff collector. Check refrigerator and freezer temperatures; record at open and close. Weekly: Deep-clean the espresso machine group heads. Vacuum the roaster's drop chute and inspect the flame sensor. Descale the hot water tower. Monthly: Replace espresso machine gaskets and shower screens. Inspect cords, plugs, and the fire extinguisher gauge. Clean condenser coils on the walk-in. Quarterly: Probat technician inspection, including…"
     },
     {
-      "id": 22,
+      "id": 23,
       "label": "Opening and Closing Checklist",
       "group": "Operations",
       "excerpt": "Opening and Closing Checklist Opening (manager on duty, 30 minutes before service): Disarm alarm, turn on lights, and check for leaks or damage. Start the espresso machine and verify pressure at 9 bar. Calibrate the grinder and pull a test shot. Check pastry case, milk dates, and sanitizer buckets. Count the till to $200 and confirm the card terminal is online. Unlock the front door at 7:00 a.m. weekdays, 8:00 a.m. weekends. See Location and Hours. Closing: Stop espresso service 15 minutes before close and offer last call. Backflush the machine and clean the grinder; see Equipment Maintenance. Wrap pastries, label date, and refrigerate or discard. Count the till, close Square, and drop the…"
     },
     {
-      "id": 23,
+      "id": 24,
       "label": "Hiring Process",
       "group": "People",
       "excerpt": "Hiring Process Jonah Reed leads hiring with Maya for roasting roles. We hire for warmth, reliability, and curiosity; coffee experience is a plus, not a requirement. Steps: Role scorecard with must-haves and nice-to-haves. Post on our website, Indeed, and local job boards for 10 days. Screen applications for availability and legal work status. 20-minute phone screen with Jonah. Paid working interview: 2 hours on the bar or in production, $22 per hour. Reference checks: two professional references. Offer letter with rate, schedule, and benefits. Background check only where required. Onboarding: First day: paperwork, tour, safety walkthrough, and menu tasting. First two weeks: Barista Training…"
     },
     {
-      "id": 24,
+      "id": 25,
       "label": "Barista Training",
       "group": "People",
       "excerpt": "Barista Training Sam Okafor owns training. New baristas complete 24 hours of paid training over two weeks before working solo. Week 1: Espresso fundamentals: dose, distribution, tamp, and shot timing. Milk steaming and pouring: target 55–60°C. Menu build and modifiers; see Coffee Menu. POS, cash handling, and Loyalty Program. Food safety, allergen awareness, and Workplace Safety. Week 2: Speed and sequencing during a mock rush. Opening and closing routines; see Opening and Closing Checklist. Grinder calibration and dial-in with the day's coffee. Customer recovery and accessibility basics. Final practical: 12 drinks to standard in 15 minutes. Certification: Trainer signs off on espresso…"
     },
     {
-      "id": 25,
+      "id": 26,
       "label": "Shift Scheduling",
       "group": "People",
       "excerpt": "Shift Scheduling Jonah Reed publishes the schedule every Thursday for the following two weeks using Homebase. Coverage rules: Minimum two people on the floor at all times; three from 8:00 to 11:00 a.m. on weekdays. One lead barista or manager on every shift. Roasting days need one roasting assistant; see Roasting Schedule. Farmers markets need two staff; see Farmers Market Plan. Availability: Submit changes at least 14 days ahead. Shift swaps must be approved by a manager and keep overtime at zero. No clopens: at least 10 hours between shifts. Time off: request 21 days ahead for vacations, 48 hours for appointments. Two weeks of paid vacation for full-time staff after one year. Fairness…"
     },
     {
-      "id": 26,
+      "id": 27,
       "label": "Performance Reviews",
       "group": "People",
       "excerpt": "Performance Reviews We run light, regular reviews instead of one annual surprise. Jonah and Maya own the process. Cadence: 30-day check-in for new hires. 90-day review with a written summary. Twice-yearly reviews in April and October. Monthly one-on-ones, 25 minutes, focused on blockers and growth. Review inputs: Self-reflection form (three wins, one challenge, one goal). Attendance and reliability. Craft and quality: drink standards, roast consistency, or account health. Customer and teammate feedback. Safety and hygiene compliance. Ratings: exceeds, meets, developing. Ratings are not tied to a forced curve. Compensation: merit increases are considered in April and are budgeted in 2026…"
     },
     {
-      "id": 27,
+      "id": 28,
       "label": "Workplace Safety",
       "group": "People",
       "excerpt": "Workplace Safety Jonah Reed is the safety lead. Everyone is responsible for speaking up. Hazards: Hot surfaces: roaster drum, cooling tray, steam wands, and kettles. Moving parts: grinder burrs, roaster drum, and cooling tray arms. Chemicals: sanitizer, descaler, and oven cleaner. Slips and burns in the bar and dish area. Delivery lifting and van driving. Rules: Closed-toe shoes, no loose sleeves near the roaster. Use heat gloves for the cooling tray and never reach into the drum. Never clean a grinder while it is plugged in. Keep aisles clear and mop spills immediately. Two-person lift for anything over 40 lb. No employee works alone in the roastery after 6:00 p.m. Incidents: stop work…"
     },
     {
-      "id": 28,
+      "id": 29,
       "label": "Coffee Menu",
       "group": "Product",
       "excerpt": "Coffee Menu Core café menu, updated November 2026. Prices include tax. Espresso: Espresso, 2 oz — $3.00 Macchiato, 3 oz — $3.75 Cortado, 4 oz — $4.25 Cappuccino, 6 oz — $4.75 Latte, 12 oz — $5.25; 16 oz — $5.75 Mocha — $6.00 Americano — $3.75 Brew: Drip, 12 oz — $3.50; 16 oz — $3.95 Pour-over — $5.50 Cold brew, 16 oz — $5.25 Nitro cold brew, 16 oz — $6.00 Retail beans: Horizon Blend, 12 oz — $19.00 Decaf Moon, 12 oz — $19.00 Rotating single origin, 12 oz — $22.00 2 lb bag — $58.00 Food: croissant $4.50, scone $4.25, breakfast sandwich $8.50, gluten-free cookie $4.00. Seasonal items rotate quarterly; see Seasonal Drinks. Margins are reviewed in Pricing and Margins. Training on the menu is in…"
     },
     {
-      "id": 29,
+      "id": 30,
       "label": "Seasonal Drinks",
       "group": "Product",
       "excerpt": "Seasonal Drinks Seasonal drinks launch four times a year and run for eight weeks. Elena and Sam develop them; Maya approves the coffee pairing. Winter (December–January): Maple Cardamom Latte — $6.25 Orange Mocha — $6.50 Honey Lavender Cold Brew — $6.25 Spring (March–April): Strawberry Matcha — $6.50 Lemon Bergamot Americano — $5.75 Vanilla Rose Cold Brew — $6.25 Summer (June–July): Coconut Cold Brew — $6.00 Peach Iced Tea Latte — $6.25 Espresso Tonic — $6.50 Autumn (September–October): Pumpkin Chai Latte — $6.25 Apple Butter Cortado — $5.50 Maple Pecan Cold Brew — $6.25 Development rules: Test with 20 customers; keep a drink only if 70% would order again. Cost ingredients at 30% or less of…"
     },
     {
-      "id": 30,
+      "id": 31,
       "label": "Bean Sourcing",
       "group": "Product",
       "excerpt": "Bean Sourcing Maya Chen owns green coffee buying. We buy through three importers: Sweet Harvest, Cascade Green, and Origin Direct. Current lineup: Horizon Blend — 60% washed Colombia Huila, 40% natural Brazil Cerrado. Notes: cocoa, caramel, orange. Our volume workhorse. Decaf Moon — sugarcane-process Colombia decaf. Notes: plum, almond, brown sugar. Rotating single origin — currently washed Ethiopia Guji, 1,950 masl. Notes: peach, jasmine, bergamot. Standards: No purchase without a sample cupping score of 84+; see Cupping Notes. Contract 60–80% of expected annual volume to lock price. Keep at least two origins in reserve for menu continuity. Visit at least one producer or importer partner…"
     },
     {
-      "id": 31,
+      "id": 32,
       "label": "Cupping Notes",
       "group": "Product",
       "excerpt": "Cupping Notes Cupping happens every Wednesday at 10:00 a.m. in the roastery. Maya leads; Sam and any interested staff join. No perfume or strong coffee before the table. Protocol: 8.25 g coffee per 150 ml water at 93°C. 4-minute steep, break the crust at 4:00, skim at 6:00. Slurp at 8–10 minutes and again at 15 minutes as it cools. Score aroma, acidity, sweetness, body, flavor, aftertaste, and balance. Scoring: use the SCA form, 6–10 scale per attribute. Anything below 80 is not served. 84+ can be a single origin; 86+ can carry a premium price. Recent results: Ethiopia Guji, washed: 87.5 — peach, jasmine, tea-like finish. On bar. Colombia Huila, washed: 85.0 — caramel, red apple. In Horizon…"
     },
     {
-      "id": 32,
+      "id": 33,
       "label": "Packaging and Labels",
       "group": "Product",
       "excerpt": "Packaging and Labels All retail coffee is packed in compostable kraft bags with a one-way valve. Labels are printed in-house on the thermal printer. Required label fields: Northwind Roasters and logo Coffee name and roast level Origin: farm or cooperative, region, altitude, process Tasting notes Net weight (12 oz / 340 g or 2 lb / 907 g) Roast date and best-by date (best within 8 weeks) Brew guidance and website Batch number for traceability Standards: Print labels the same day as roasting; see Roasting Schedule. Apply labels straight and centered, 2 cm from the top seam. Check weight on the scale: 340 g ± 5 g. Wholesale cases use plain cases with a roast-date sticker and brew card. See…"
-    },
-    {
-      "id": 33,
-      "label": "Teardown · example.com",
-      "group": "Teardowns",
-      "excerpt": "Teardown · example.com Verdict: A static placeholder page with minimal functionality. The answer: This is a simple static website with no complex features, libraries, or dynamic content. The stack: 3D engine: Not found (evidence: none) Animation: Not found (evidence: none) Smooth scroll: Not found (evidence: none) Visual effects: Not found (evidence: none) Compression: Not found (evidence: none) Build tools: Not found (evidence: none) How the effect works: The page loads a single script file (s.js) of 1,679 bytes. No other assets are loaded. No routes are declared. No visual effects or animations are present. The page remains static with no dynamic behavior. What it loads: 1 script file…"
-    },
-    {
-      "id": 34,
-      "label": "Teardown · threejs.org",
-      "group": "Teardowns",
-      "excerpt": "Teardown · threejs.org Verdict: A standard, unminified Three.js example page demonstrating glTF loading with HDR lighting. The answer The page is a WebGL demo that loads a glTF model and applies an HDR environment map for realistic lighting. The stack 3D Engine: Three.js (r187) - Evidence: Licence banner and REVISION constant in three.core.js. Compression: DRACOLoader - Evidence: String found in captured code. Controls: OrbitControls - Evidence: Script load and REA dependency graph. GUI: lil-gui - Evidence: Script load. How the effect works The browser loads the Three.js core and module scripts. GLTFLoader is initialized to fetch the model definition from raw.githubusercontent.com…"
     }
   ],
   "links": [
@@ -223,11 +217,7 @@ const GRAPH = {
     },
     {
       "source": 0,
-      "target": 33
-    },
-    {
-      "source": 0,
-      "target": 34
+      "target": 3
     },
     {
       "source": 1,
@@ -235,343 +225,331 @@ const GRAPH = {
     },
     {
       "source": 1,
-      "target": 33
-    },
-    {
-      "source": 1,
-      "target": 34
-    },
-    {
-      "source": 3,
-      "target": 5
-    },
-    {
-      "source": 3,
-      "target": 8
-    },
-    {
-      "source": 3,
-      "target": 20
-    },
-    {
-      "source": 3,
-      "target": 30
+      "target": 3
     },
     {
       "source": 4,
-      "target": 13
+      "target": 6
     },
     {
       "source": 4,
-      "target": 23
-    },
-    {
-      "source": 4,
-      "target": 25
-    },
-    {
-      "source": 4,
-      "target": 29
-    },
-    {
-      "source": 4,
-      "target": 31
-    },
-    {
-      "source": 4,
-      "target": 32
-    },
-    {
-      "source": 5,
-      "target": 7
-    },
-    {
-      "source": 5,
-      "target": 8
-    },
-    {
-      "source": 5,
-      "target": 11
-    },
-    {
-      "source": 5,
-      "target": 12
-    },
-    {
-      "source": 5,
-      "target": 14
-    },
-    {
-      "source": 5,
-      "target": 15
-    },
-    {
-      "source": 5,
-      "target": 16
-    },
-    {
-      "source": 5,
-      "target": 17
-    },
-    {
-      "source": 5,
-      "target": 18
-    },
-    {
-      "source": 5,
-      "target": 20
-    },
-    {
-      "source": 5,
-      "target": 22
-    },
-    {
-      "source": 5,
-      "target": 24
-    },
-    {
-      "source": 5,
-      "target": 25
-    },
-    {
-      "source": 5,
-      "target": 28
-    },
-    {
-      "source": 5,
-      "target": 30
-    },
-    {
-      "source": 6,
-      "target": 8
-    },
-    {
-      "source": 6,
-      "target": 20
-    },
-    {
-      "source": 6,
-      "target": 22
-    },
-    {
-      "source": 7,
-      "target": 11
-    },
-    {
-      "source": 7,
-      "target": 23
-    },
-    {
-      "source": 7,
-      "target": 27
-    },
-    {
-      "source": 8,
       "target": 9
     },
     {
-      "source": 8,
-      "target": 10
-    },
-    {
-      "source": 8,
-      "target": 11
-    },
-    {
-      "source": 8,
-      "target": 12
-    },
-    {
-      "source": 8,
-      "target": 15
-    },
-    {
-      "source": 8,
+      "source": 4,
       "target": 21
     },
     {
-      "source": 8,
-      "target": 25
+      "source": 4,
+      "target": 31
     },
     {
-      "source": 8,
-      "target": 26
-    },
-    {
-      "source": 8,
-      "target": 30
-    },
-    {
-      "source": 9,
-      "target": 11
-    },
-    {
-      "source": 9,
-      "target": 19
-    },
-    {
-      "source": 10,
-      "target": 15
-    },
-    {
-      "source": 10,
-      "target": 16
-    },
-    {
-      "source": 10,
-      "target": 20
-    },
-    {
-      "source": 10,
-      "target": 28
-    },
-    {
-      "source": 10,
-      "target": 29
-    },
-    {
-      "source": 10,
-      "target": 30
-    },
-    {
-      "source": 11,
-      "target": 12
-    },
-    {
-      "source": 11,
-      "target": 25
-    },
-    {
-      "source": 12,
-      "target": 19
-    },
-    {
-      "source": 13,
+      "source": 5,
       "target": 14
     },
     {
-      "source": 13,
-      "target": 15
-    },
-    {
-      "source": 13,
-      "target": 16
-    },
-    {
-      "source": 13,
-      "target": 32
-    },
-    {
-      "source": 14,
-      "target": 15
-    },
-    {
-      "source": 14,
-      "target": 17
-    },
-    {
-      "source": 14,
-      "target": 18
-    },
-    {
-      "source": 14,
-      "target": 28
-    },
-    {
-      "source": 14,
-      "target": 29
-    },
-    {
-      "source": 14,
-      "target": 30
-    },
-    {
-      "source": 15,
-      "target": 16
-    },
-    {
-      "source": 15,
-      "target": 17
-    },
-    {
-      "source": 15,
+      "source": 5,
       "target": 24
     },
     {
-      "source": 16,
-      "target": 20
+      "source": 5,
+      "target": 26
     },
     {
-      "source": 16,
+      "source": 5,
       "target": 30
     },
     {
-      "source": 17,
-      "target": 25
+      "source": 5,
+      "target": 32
     },
     {
-      "source": 17,
-      "target": 28
+      "source": 5,
+      "target": 33
     },
     {
-      "source": 17,
-      "target": 29
+      "source": 6,
+      "target": 8
     },
     {
-      "source": 18,
-      "target": 20
+      "source": 6,
+      "target": 9
     },
     {
-      "source": 18,
+      "source": 6,
+      "target": 12
+    },
+    {
+      "source": 6,
+      "target": 13
+    },
+    {
+      "source": 6,
+      "target": 15
+    },
+    {
+      "source": 6,
+      "target": 16
+    },
+    {
+      "source": 6,
+      "target": 17
+    },
+    {
+      "source": 6,
+      "target": 18
+    },
+    {
+      "source": 6,
+      "target": 19
+    },
+    {
+      "source": 6,
       "target": 21
     },
     {
-      "source": 18,
+      "source": 6,
+      "target": 23
+    },
+    {
+      "source": 6,
       "target": 25
     },
     {
-      "source": 18,
+      "source": 6,
+      "target": 26
+    },
+    {
+      "source": 6,
+      "target": 29
+    },
+    {
+      "source": 6,
+      "target": 31
+    },
+    {
+      "source": 7,
+      "target": 9
+    },
+    {
+      "source": 7,
+      "target": 21
+    },
+    {
+      "source": 7,
+      "target": 23
+    },
+    {
+      "source": 8,
+      "target": 12
+    },
+    {
+      "source": 8,
+      "target": 24
+    },
+    {
+      "source": 8,
+      "target": 28
+    },
+    {
+      "source": 9,
+      "target": 10
+    },
+    {
+      "source": 9,
+      "target": 11
+    },
+    {
+      "source": 9,
+      "target": 12
+    },
+    {
+      "source": 9,
+      "target": 13
+    },
+    {
+      "source": 9,
+      "target": 16
+    },
+    {
+      "source": 9,
+      "target": 22
+    },
+    {
+      "source": 9,
+      "target": 26
+    },
+    {
+      "source": 9,
+      "target": 27
+    },
+    {
+      "source": 9,
+      "target": 31
+    },
+    {
+      "source": 10,
+      "target": 12
+    },
+    {
+      "source": 10,
+      "target": 20
+    },
+    {
+      "source": 11,
+      "target": 16
+    },
+    {
+      "source": 11,
+      "target": 17
+    },
+    {
+      "source": 11,
+      "target": 21
+    },
+    {
+      "source": 11,
+      "target": 29
+    },
+    {
+      "source": 11,
       "target": 30
     },
     {
-      "source": 18,
+      "source": 11,
+      "target": 31
+    },
+    {
+      "source": 12,
+      "target": 13
+    },
+    {
+      "source": 12,
+      "target": 26
+    },
+    {
+      "source": 13,
+      "target": 20
+    },
+    {
+      "source": 14,
+      "target": 15
+    },
+    {
+      "source": 14,
+      "target": 16
+    },
+    {
+      "source": 14,
+      "target": 17
+    },
+    {
+      "source": 14,
+      "target": 33
+    },
+    {
+      "source": 15,
+      "target": 16
+    },
+    {
+      "source": 15,
+      "target": 18
+    },
+    {
+      "source": 15,
+      "target": 19
+    },
+    {
+      "source": 15,
+      "target": 29
+    },
+    {
+      "source": 15,
+      "target": 30
+    },
+    {
+      "source": 15,
+      "target": 31
+    },
+    {
+      "source": 16,
+      "target": 17
+    },
+    {
+      "source": 16,
+      "target": 18
+    },
+    {
+      "source": 16,
+      "target": 25
+    },
+    {
+      "source": 17,
+      "target": 21
+    },
+    {
+      "source": 17,
       "target": 31
     },
     {
       "source": 18,
+      "target": 26
+    },
+    {
+      "source": 18,
+      "target": 29
+    },
+    {
+      "source": 18,
+      "target": 30
+    },
+    {
+      "source": 19,
+      "target": 21
+    },
+    {
+      "source": 19,
+      "target": 22
+    },
+    {
+      "source": 19,
+      "target": 26
+    },
+    {
+      "source": 19,
+      "target": 31
+    },
+    {
+      "source": 19,
       "target": 32
     },
     {
       "source": 19,
-      "target": 30
+      "target": 33
     },
     {
       "source": 20,
-      "target": 32
+      "target": 31
     },
     {
       "source": 21,
-      "target": 22
-    },
-    {
-      "source": 21,
-      "target": 27
+      "target": 33
     },
     {
       "source": 22,
-      "target": 24
+      "target": 23
     },
     {
       "source": 22,
-      "target": 27
+      "target": 28
     },
     {
       "source": 23,
-      "target": 24
+      "target": 25
     },
     {
       "source": 23,
-      "target": 26
+      "target": 28
     },
     {
       "source": 24,
@@ -579,27 +557,35 @@ const GRAPH = {
     },
     {
       "source": 24,
-      "target": 26
-    },
-    {
-      "source": 24,
       "target": 27
     },
     {
-      "source": 24,
+      "source": 25,
+      "target": 26
+    },
+    {
+      "source": 25,
+      "target": 27
+    },
+    {
+      "source": 25,
       "target": 28
     },
     {
-      "source": 28,
+      "source": 25,
       "target": 29
     },
     {
-      "source": 30,
-      "target": 31
+      "source": 29,
+      "target": 30
     },
     {
-      "source": 30,
+      "source": 31,
       "target": 32
+    },
+    {
+      "source": 31,
+      "target": 33
     }
   ]
 };

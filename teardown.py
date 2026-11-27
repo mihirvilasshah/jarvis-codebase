@@ -853,8 +853,11 @@ def build_digest(result: dict, question: str, host: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run_teardown(url, command=None, headless: bool = False) -> dict:
+def run_teardown(url, command=None, headless: bool = False, progress=None) -> dict:
     """Capture five labelled evidence streams attached to our own fresh Chrome."""
+    def step(number: int, label: str) -> None:
+        if progress:
+            progress(number, label)
     diag = diagnose()
     if not diag["ready"]:
         return {"ok": False, "reply": missing_line(diag), "diagnostics": diag}
@@ -912,6 +915,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
         proc = subprocess.Popen(
             args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW
         )
+        step(1, "Opening the site in a clean browser")
         deadline = time.monotonic() + CDP_WAIT_SECONDS
         version = None
         while time.monotonic() < deadline:
@@ -955,6 +959,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
             raise RuntimeError("The page did not finish loading within 25 seconds")
         load_seconds = round(ready_at - started, 2)
         time.sleep(INTRO_WAIT_SECONDS)
+        step(2, "Waiting for it to load")
         title = str(client.evaluate("document.title") or "")
         href = str(client.evaluate("location.href") or "")
 
@@ -982,6 +987,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
                 watch_holder["error"] = str(exc)
 
         watcher = threading.Thread(target=watch, name="rea-watch", daemon=True)
+        step(3, "REA is watching while I scroll")
         watcher.start()
         time.sleep(1.0)
         before_scroll = client.evaluate("window.scrollY || 0")
@@ -1000,6 +1006,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
                  f"wheel scroll {before_scroll} -> {after_scroll}")
 
         # 2. READ THE CODE
+        step(4, "REA is reading the code")
         bundle = _run_rea(node, ["analyze-web-bundle", endpoint, target_id], timeout=240)
         strings = _strings(watch_data) + _strings(bundle)
         routes = _extract_routes(bundle)
@@ -1017,6 +1024,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
             client.wheel(-900)
             time.sleep(0.05)
         top = client.evaluate("window.scrollY || 0")
+        step(5, "Taking a snapshot")
         screenshot = _run_rea(node, ["capture-web-screenshot", endpoint, target_id], timeout=120)
         png_saved = _decode_snapshot(screenshot, snapshot_path)
         evidence("Jarvis", "scroll-top", "Input.dispatchMouseEvent", {"scrollY": top}, "wheeled back to top")
@@ -1025,6 +1033,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
                  f"PNG saved: {png_saved}")
 
         # 4. ASSET LOG - Jarvis's own browser reads.
+        step(6, "Listing everything it loaded")
         entries = client.evaluate(
             "performance.getEntriesByType('resource').map(e => ({name:e.name,transferSize:e.transferSize,"
             "encodedBodySize:e.encodedBodySize,decodedBodySize:e.decodedBodySize,"
@@ -1035,6 +1044,7 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
                  assets, f"{assets['total_files']} files, {assets['total_bytes']} bytes, {len(assets['top12'])} largest")
 
         # 5. FINGERPRINTS - Jarvis reads REA's captured code.
+        step(7, "Identifying the stack")
         fingerprints = _fingerprints(strings)
         other_banners = _other_banners(strings)
         evidence("Jarvis", "fingerprints", "REA code strings",

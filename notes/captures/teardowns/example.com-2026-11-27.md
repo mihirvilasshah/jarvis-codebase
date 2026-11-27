@@ -4,40 +4,44 @@ captured: 2026-11-27
 
 # Teardown · example.com
 
-**Verdict:** A static placeholder page with minimal functionality.
+**Verdict**: A minimal static placeholder with no functional complexity.
 
-**The answer:** This is a simple static website with no complex features, libraries, or dynamic content.
+**The answer**
+The site is a static informational page with no backend logic, no third-party dependencies, and no complex frontend architecture.
 
-**The stack:**
-- **3D engine:** Not found (evidence: none)
-- **Animation:** Not found (evidence: none)
-- **Smooth scroll:** Not found (evidence: none)
-- **Visual effects:** Not found (evidence: none)
-- **Compression:** Not found (evidence: none)
-- **Build tools:** Not found (evidence: none)
+**The stack**
+*   **3D engine**: None found (Evidence: `found=False`)
+*   **Animation**: None found (Evidence: `found=False`)
+*   **Smooth scroll**: None found (Evidence: `found=False`)
+*   **Visual effects**: None found (Evidence: `found=False`)
+*   **Compression**: None found (Evidence: `found=False`)
+*   **Build tools**: None found (Evidence: `found=False`)
 
-**How the effect works:**
-1. The page loads a single script file (s.js) of 1,679 bytes.
-2. No other assets are loaded.
-3. No routes are declared.
-4. No visual effects or animations are present.
-5. The page remains static with no dynamic behavior.
+**How the effect works**
+1.  The browser requests the main HTML document from the root path.
+2.  The browser parses the HTML and identifies a single script tag pointing to a local file.
+3.  The browser downloads the 1,679-byte script file.
+4.  The script executes, but no external libraries or complex logic are triggered.
+5.  The page renders the static content "Example Domain".
+6.  The user scrolls slightly, triggering 16 wheel events, but no custom scroll effects are observed.
 
-**What it loads:**
-- 1 script file: s.js (1,679 bytes)
-- No other assets
+**What it loads**
+*   1 Script file: `s.js` (1,679 bytes) from `example.com`
+*   No images, fonts, or other assets are reported in the asset totals.
 
-**Rebuild it:**
-1. Create a basic HTML file with the title "Example Domain."
-2. Add a single script file (s.js) with minimal content.
-3. Ensure the page loads quickly with no additional assets.
-4. Test that the page displays correctly without any dynamic features.
-5. Verify that no routes or complex functionality are present.
+**Rebuild it**
+1.  Create a single HTML file with the title "Example Domain".
+2.  Add a simple paragraph with the text "This domain is for use in illustrative examples in documents."
+3.  Add a link to the IANA website with the text "More information..."
+4.  Create a small JavaScript file `s.js` with minimal or no code (since no specific logic was detected).
+5.  Link the `s.js` file in the HTML head or body.
+6.  Serve the files over HTTPS.
+7.  Ensure no external CSS or JavaScript libraries are included.
 
-**What the evidence can't show:**
-- The actual content of the s.js file.
-- Whether the script performs any hidden functionality.
-- The exact purpose of the placeholder page.
+**What the evidence can't show**
+*   The content of the `s.js` file, as no code signals or library banners were captured.
+*   Whether the script performs any hidden actions, as no specific behavior was observed beyond the page load.
+*   The exact HTML structure, as only the title and general content were inferred from the snapshot and metadata.
 
 ## Evidence
 
@@ -46,7 +50,7 @@ captured: 2026-11-27
 - none identified
 - Assets: 1 files, 1,679 bytes (Jarvis browser read)
 - Origins: example.com (Jarvis browser read)
-- REA evidence ids: ev_f4a7ef46edf9c673c8b89c6d8ab83458652a731e0292e28864968f91a32f7f25, ev_34f13281225accae96f3160001f364f99524b51df1e0c58588a07c1efeac3fa0
+- REA evidence ids: ev_ee1d31fbe5c7e2911fe833ce84d4515b8044a84d1b471e1bebe262c82e7695eb, ev_b41f02c5d468a49c52d64601ae9bc52366898a08d8f4b4755c4fa2e140cd94fd
 - Attribution: REA lines were captured by REA; Jarvis lines were read from the owned browser or REA's code.
 - Limits: REA attaches to an already-running page; library names come from banners and strings, not a package manifest.
 

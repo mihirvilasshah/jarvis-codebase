@@ -14,6 +14,7 @@ import re
 import shutil
 import sys
 import threading
+import time
 import traceback
 import unicodedata
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -99,7 +100,7 @@ CONTROL_TAGS = {
         "run": "_tag_index",
     },
     "TEARDOWN": {
-        "help": "observe one public website read-only with REA; pass the http(s) URL",
+        "help": "when asked to reverse engineer a named site with no address, reply with [TEARDOWN:SITE|QUESTION] and nothing else; use 'this' for the current tab",
         "run": "_tag_teardown",
     },
 }
@@ -202,6 +203,14 @@ def apply_control_tags(result: dict) -> dict:
 REMEMBER_RE = re.compile(r"^\s*remember\s+that\b[\s,:;\-–—]*(.*)$", re.I | re.S)
 CAPTURE_LOCK = threading.Lock()
 TEARDOWN_LOCK = threading.Lock()
+TEARDOWN_STATUS = {"active": False, "site": "", "step": 0, "label": "", "started": 0.0}
+TEARDOWN_CANCEL = False
+LAST_TEARDOWN = {}
+
+
+def _cancel_teardown() -> None:
+    global TEARDOWN_CANCEL
+    TEARDOWN_CANCEL = True
 
 
 def _slugify(value: str, limit: int = 60) -> str:
@@ -318,21 +327,35 @@ def remember(
         else:
             content = "---\ncaptured: " + today + "\n---\n\n# " + note_title + "\n\n" + body + "\n"
 
+        existed = filename is not None and path.exists()
         path.write_text(content, encoding="utf-8")
         try:
-            label = note_title if title else build.label_from_path(path)
+            label = build.label_from_path(path)
             group = build.group_from_path(path)
             excerpt = build.make_excerpt(build.plain_text(content))
 
             graph = json.loads(build.JSON_PATH.read_text(encoding="utf-8"))
             if not isinstance(graph.get("nodes"), list):
                 raise ValueError("The graph file has no node list.")
-            node_id = len(graph["nodes"])
             links = _capture_links(content, label, path, graph["nodes"])
             anchor = _capture_anchor(body, label, brain.load_graph())
+            existing = next(
+                (node for node in graph["nodes"] if node.get("label") == label), None
+            ) if existed else None
 
-            node = {"id": node_id, "label": label, "group": group, "excerpt": excerpt}
-            graph["nodes"].append(node)
+            if existing is not None:
+                node_id = int(existing["id"])
+                existing["group"] = group
+                existing["excerpt"] = excerpt
+                graph["links"] = [
+                    link for link in graph["links"]
+                    if link.get("source") != node_id and link.get("target") != node_id
+                ]
+                node = existing
+            else:
+                node_id = len(graph["nodes"])
+                node = {"id": node_id, "label": label, "group": group, "excerpt": excerpt}
+                graph["nodes"].append(node)
             graph["links"].extend(
                 {"source": min(node_id, other), "target": max(node_id, other)} for other in links
             )
@@ -381,6 +404,51 @@ SUMMARY: one short paragraph.
 ---NOTE---
 A markdown note containing, in order: a one-line verdict, "The answer", "The stack" with each item's evidence, "How the effect works" as numbered steps, "What it loads", "Rebuild it" with 5 to 7 steps for Claude Code, and "What the evidence can't show".
 Think and answer inside one 7000-token budget."""
+
+
+def _front_tab_url() -> str | None:
+    """On a Mac, read the front Chrome tab - never the Jarvis tab itself."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        script = 'tell application "Google Chrome" to get URL of active tab of front window'
+        result = subprocess.run(
+            ["osascript", "-e", script], capture_output=True, text=True, timeout=10
+        )
+        url = (result.stdout or "").strip()
+        parsed = urlparse(url)
+        if parsed.hostname in {"127.0.0.1", "localhost"} and parsed.port in {4700, None}:
+            return None
+        return url or None
+    except Exception:
+        return None
+
+
+def _teardown_progress(number: int, label: str) -> None:
+    TEARDOWN_STATUS.update({"active": True, "step": number, "label": label})
+    if TEARDOWN_CANCEL:
+        raise RuntimeError("cancelled")
+
+
+def _last_teardown_note() -> Path | None:
+    folder = build.NOTES_DIR / "captures" / "teardowns"
+    if not folder.exists():
+        return None
+    notes = [path for path in folder.glob("*.md") if path.is_file()]
+    if not notes:
+        return None
+    return max(notes, key=lambda path: path.stat().st_mtime)
+
+
+def _last_snapshot() -> Path | None:
+    remembered = str(LAST_TEARDOWN.get("snapshot") or "")
+    if remembered and Path(remembered).exists():
+        return Path(remembered)
+    note = _last_teardown_note()
+    if note is None:
+        return None
+    candidate = note.parent / "assets" / (note.stem + ".png")
+    return candidate if candidate.exists() else None
 
 
 def _teardown_host(url: str) -> str:
@@ -522,16 +590,28 @@ def _write_teardown_note(host: str, parsed: dict, result: dict) -> tuple[dict, s
 
 def compose_teardown(url, question=None, headless: bool = False) -> dict:
     """One-at-a-time evidence, one brain call, one filed note, one flight."""
+    global TEARDOWN_CANCEL, LAST_TEARDOWN
     if teardown is None:
         return {"ok": False, "reply": "I'm afraid the teardown bay isn't fitted, sir. Install teardown.py and REA 6.10.1."}
     if not TEARDOWN_LOCK.acquire(blocking=False):
         return {"ok": False, "reply": "I'm already taking one apart, sir."}
+
+    TEARDOWN_CANCEL = False
+    TEARDOWN_STATUS.update(
+        {"active": True, "site": str(url or ""), "step": 0, "label": "", "started": time.time()}
+    )
     try:
+        site = str(url or "").strip()
+        if site.lower() in {"this", "this site", "this page", "current", "current tab"}:
+            site = _front_tab_url() or ""
+            if not site:
+                return {"ok": False, "reply": "Please give me the site's name, sir."}
         asked = str(question or "").strip() or "What is this site and how does it work?"
-        capture = teardown.run_teardown(url, headless=headless)
+        capture = teardown.run_teardown(site, headless=headless, progress=_teardown_progress)
         if not capture.get("ok"):
             return {"ok": False, "reply": str(capture.get("reply") or "The teardown failed, sir.")}
-        host = _teardown_host(url)
+        _teardown_progress(8, "Writing the teardown")
+        host = _teardown_host(site)
         digest = teardown.build_digest(capture, asked, host)
         written = _teardown_brain(digest, asked, host)
         parsed = _parse_teardown(written)
@@ -543,13 +623,21 @@ def compose_teardown(url, question=None, headless: bool = False) -> dict:
             parsed["summary"] = "The teardown has been filed with its evidence."
         concept_notes = _ensure_concept_notes()
         record, snapshot = _write_teardown_note(host, parsed, capture)
-        return {
+        full_note = (ROOT / record["file"]).read_text(encoding="utf-8")
+        assets_data = capture.get("asset_log") or {}
+        stack = [
+            {"category": item.get("category"), "version": item.get("version") or "present"}
+            for item in (capture.get("fingerprints") or []) if item.get("found")
+        ]
+        elapsed = max(1, round(time.time() - TEARDOWN_STATUS["started"]))
+        result = {
             "ok": True,
             "reply": parsed["summary"],
             "spoken": parsed["spoken"],
             "label": parsed["label"],
             "summary": parsed["summary"],
             "note": parsed["note"],
+            "full_note": full_note,
             "note_file": record["file"],
             "snapshot": snapshot,
             "notes": concept_notes + [record],
@@ -557,14 +645,26 @@ def compose_teardown(url, question=None, headless: bool = False) -> dict:
             "digest": digest,
             "digest_chars": len(digest),
             "host": host,
+            "site": site,
+            "stack": stack,
+            "totals": {
+                "files": assets_data.get("total_files", 0),
+                "bytes": assets_data.get("total_bytes", 0),
+            },
+            "elapsed_seconds": elapsed,
         }
+        LAST_TEARDOWN = result
+        return result
     except brain.BrainError as exc:
         return {"ok": False, "reply": exc.message}
     except Exception as exc:
-        traceback.print_exc()
         detail = str(exc).replace("\r", " ").replace("\n", " ")[:180]
+        if "cancel" in detail.lower():
+            return {"ok": False, "reply": "Very good, sir — I stopped taking it apart."}
+        traceback.print_exc()
         return {"ok": False, "reply": f"The teardown could not be written, sir: {detail}"}
     finally:
+        TEARDOWN_STATUS.update({"active": False, "step": 8, "label": ""})
         TEARDOWN_LOCK.release()
 
 
@@ -604,7 +704,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -641,6 +741,40 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 self._json(200, teardown.diagnose())
             return
+        if path == "/teardown/status":
+            self._json(200, dict(TEARDOWN_STATUS))
+            return
+        if path == "/teardown/snapshot":
+            snapshot = _last_snapshot()
+            if snapshot is None:
+                self._json(404, {"error": "No teardown snapshot yet."})
+                return
+            body = snapshot.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == "/teardown/last":
+            note = _last_teardown_note()
+            if note is None:
+                self._json(404, {"ok": False, "reply": "No teardown has been filed yet, sir."})
+                return
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "label": note.stem.replace("-", " "),
+                    "full_note": note.read_text(encoding="utf-8"),
+                    "snapshot": "/teardown/snapshot",
+                    "note_file": note.relative_to(ROOT).as_posix(),
+                },
+            )
+            return
         if path == "/":
             self.path = "/index.html"
         # Decode and normalise before the safety check so encoded traversal
@@ -657,7 +791,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -692,6 +826,11 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/teardown/cancel":
+            _cancel_teardown()
+            self._json(200, {"ok": True, "reply": "Very good, sir — I'll stop after this step."})
             return
 
         if path == "/teardown/compose":

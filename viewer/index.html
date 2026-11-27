@@ -565,6 +565,44 @@
     .history-actions .ghost-btn { padding: 8px 13px; font-size: 11px; }
     .history-actions .danger:hover { color: #fecdd3; border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.08); }
 
+    .teardown-panel {
+      position: fixed;
+      top: 104px;
+      left: 28px;
+      z-index: 22;
+      width: 300px;
+      max-height: calc(100vh - 150px);
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      overflow: hidden;
+      padding: 14px 15px;
+      border: 1px solid rgba(103, 232, 249, 0.22);
+      border-radius: 16px;
+      background: rgba(6, 12, 22, 0.9);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+    .teardown-panel.show { display: flex; }
+    .teardown-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #teardown-site { overflow: hidden; color: #e6f3ff; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .via-rea { flex: none; border: 1px solid rgba(167, 139, 250, 0.35); border-radius: 999px; padding: 2px 7px; color: #c7b5ff; font-family: var(--mono); font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+    #teardown-steps { display: flex; flex-direction: column; gap: 5px; margin: 0; padding-left: 18px; color: #6f89a6; font-size: 11px; line-height: 1.35; }
+    #teardown-steps li.done { color: #5eead4; }
+    #teardown-steps li.current { color: #67e8f9; font-weight: 600; }
+    #teardown-done { display: none; flex-direction: column; gap: 8px; }
+    #teardown-done.show { display: flex; }
+    #teardown-line { color: #dff8ff; font-size: 11.5px; }
+    #teardown-shot { width: 100%; max-height: 150px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
+    #teardown-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .teardown-chip { border: 1px solid rgba(148, 184, 224, 0.2); border-radius: 999px; padding: 3px 8px; color: #b9cee6; font-size: 9.5px; }
+    #teardown-totals { color: #7d95b0; font-family: var(--mono); font-size: 9px; }
+    #teardown-read { align-self: flex-start; padding: 6px 10px; font-size: 10px; }
+    .reader-card { width: min(760px, 100%); }
+    #reader-body { max-height: 62vh; overflow: auto; margin: 0; color: #cfe0f5; font-family: var(--mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+    .reader-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .reader-actions .ghost-btn { padding: 8px 12px; font-size: 11px; }
+
     .loader {
       position: fixed;
       inset: 0;
@@ -797,6 +835,47 @@
     <span aria-hidden="true">✦</span> Ask your notes
   </button>
 
+  <section id="teardown-panel" class="teardown-panel" aria-live="polite">
+    <div class="teardown-head">
+      <span id="teardown-site">—</span>
+      <span class="via-rea">via REA</span>
+    </div>
+    <ol id="teardown-steps">
+      <li>Opening the site in a clean browser</li>
+      <li>Waiting for it to load</li>
+      <li>REA is watching while I scroll</li>
+      <li>REA is reading the code</li>
+      <li>Taking a snapshot</li>
+      <li>Listing everything it loaded</li>
+      <li>Identifying the stack</li>
+      <li>Writing the teardown</li>
+    </ol>
+    <div id="teardown-done">
+      <div id="teardown-line">Taken apart in 0 s</div>
+      <img id="teardown-shot" alt="Snapshot of the torn-down page" />
+      <div id="teardown-chips"></div>
+      <div id="teardown-totals"></div>
+      <button id="teardown-read" class="ghost-btn" type="button">Read the full teardown</button>
+    </div>
+  </section>
+
+  <div id="teardown-reader" class="history-overlay" aria-hidden="true">
+    <div class="history-card reader-card" role="dialog" aria-modal="true" aria-labelledby="reader-title">
+      <div class="history-head">
+        <div>
+          <p class="eyebrow">Jarvis · teardown</p>
+          <h2 id="reader-title">Full teardown</h2>
+        </div>
+        <button id="reader-close" class="icon-btn" type="button" aria-label="Close teardown reader">×</button>
+      </div>
+      <pre id="reader-body"></pre>
+      <div class="reader-actions">
+        <button id="reader-obsidian" class="ghost-btn" type="button">Open in Obsidian</button>
+        <button id="reader-done" class="ghost-btn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="history-overlay" class="history-overlay" aria-hidden="true">
     <div class="history-card" role="dialog" aria-modal="true" aria-labelledby="history-title">
       <div class="history-head">
@@ -925,6 +1004,314 @@
     const historyList = $('history-list');
     const toastEl = $('toast');
     const legendEl = $('legend');
+
+    /* =====================================================================
+       TEARDOWN - voice routes, live panel, and reader.
+       Routes are checked before the brain; only site-named sentences trigger.
+       ===================================================================== */
+    const TEARDOWN_STEP_LABELS = [
+      'Opening the site in a clean browser',
+      'Waiting for it to load',
+      'REA is watching while I scroll',
+      'REA is reading the code',
+      'Taking a snapshot',
+      'Listing everything it loaded',
+      'Identifying the stack',
+      'Writing the teardown'
+    ];
+    const teardownPanel = $('teardown-panel');
+    const teardownSite = $('teardown-site');
+    const teardownSteps = $('teardown-steps');
+    const teardownDone = $('teardown-done');
+    const teardownLine = $('teardown-line');
+    const teardownShot = $('teardown-shot');
+    const teardownChips = $('teardown-chips');
+    const teardownTotals = $('teardown-totals');
+    const teardownReader = $('teardown-reader');
+    const readerBody = $('reader-body');
+    const readerObsidian = $('reader-obsidian');
+    let teardownLast = null;
+    let teardownStart = 0;
+    let teardownPollId = 0;
+
+    const SITE_SOURCE =
+      '(?:[a-z0-9-]+\\s+dot\\s+[a-z0-9-]+(?:\\s+dot\\s+[a-z0-9-]+)*|' +
+      '(?:[a-z0-9-]+\\.)+[a-z]{2,}|localhost(?:\\s+colon\\s+\\d+)?|this\\s+(?:site|page))';
+    const TEARDOWN_SITE_RE = new RegExp(
+      '^(?:reverse engineer|tear down|take apart|teardown|how does|what is|what\'s)\\b[\\s\\S]*?' +
+        SITE_SOURCE + '[\\s\\S]*$',
+      'i'
+    );
+    const TEARDOWN_THIS_RE = /^(?:this\s+(?:site|page))$/i;
+    const LAST_TEARDOWN_RE = /^(?:show me the last teardown|show the last teardown|last teardown)$/i;
+    const OPEN_TEARDOWN_RE = /^(?:open the full teardown|open full teardown)$/i;
+    const CLOSE_TEARDOWN_RE = /^(?:close the teardown|hide the teardown)$/i;
+    const CANCEL_TEARDOWN_RE = /^(?:cancel the teardown|cancel teardown)$/i;
+
+    function cleanThought(text) {
+      return String(text || '').replace(/[.!?,;:]+$/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function speechToAddress(text) {
+      const source = String(text || '');
+      const match =
+        source.match(/\b[a-z0-9-]+(?:\s+dot\s+[a-z0-9-]+)+\b/i) ||
+        source.match(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/i) ||
+        source.match(/\blocalhost(?:\s+colon\s+\d+)?\b/i);
+      if (!match) return null;
+      let address = match[0]
+        .replace(/\s*dot\s*/gi, '.')
+        .replace(/\s*slash\s*/gi, '/')
+        .replace(/\s*colon\s*/gi, ':')
+        .trim();
+      if (/^https?:\/\//i.test(address)) return address;
+      if (/^localhost(?::\d+)?$/i.test(address)) return 'http://' + address;
+      return 'https://' + address;
+    }
+
+    function fitTeardown() {
+      if (!teardownPanel.classList.contains('show')) return;
+      const rect = teardownPanel.getBoundingClientRect();
+      const chat = chatEl.getBoundingClientRect();
+      const detail = panel.getBoundingClientRect();
+      const reserve = chat.left < rect.right && chat.top < rect.bottom ? Math.max(0, innerHeight - chat.top + 18) : 24;
+      const available = Math.max(170, innerHeight - rect.top - reserve);
+      teardownPanel.style.maxHeight = Math.round(available) + 'px';
+      const crowded =
+        chat.left < rect.right && chat.top < rect.bottom ||
+        detail.left < rect.right && detail.top < rect.bottom;
+      teardownShot.style.display = crowded || teardownPanel.scrollHeight > available ? 'none' : '';
+      if (teardownPanel.scrollHeight > available) {
+        teardownSteps.style.fontSize = '10px';
+      }
+    }
+
+    function teardownSetStep(step, label) {
+      [...teardownSteps.children].forEach((item, index) => {
+        const at = index + 1;
+        item.classList.toggle('done', at < step);
+        item.classList.toggle('current', at === step);
+        if (at === step && label) item.textContent = label;
+      });
+      fitTeardown();
+    }
+
+    function teardownShow(site) {
+      teardownSite.textContent = site || '—';
+      teardownLast = null;
+      teardownPanel.classList.add('show');
+      teardownDone.classList.remove('show');
+      teardownSteps.style.display = '';
+      teardownSteps.style.fontSize = '';
+      [...teardownSteps.children].forEach((item, index) => {
+        item.textContent = TEARDOWN_STEP_LABELS[index];
+        item.classList.remove('done', 'current');
+      });
+      fitTeardown();
+    }
+
+    function teardownHide() {
+      teardownPanel.classList.remove('show');
+      teardownReader.classList.remove('open');
+      teardownReader.setAttribute('aria-hidden', 'true');
+    }
+
+    function teardownFinish(data) {
+      teardownSteps.style.display = 'none';
+      teardownDone.classList.add('show');
+      const seconds = Math.max(1, Math.round((performance.now() - teardownStart) / 1000));
+      teardownLine.textContent = 'Taken apart in ' + seconds + ' s';
+      teardownShot.src = '/teardown/snapshot?t=' + Date.now();
+      teardownChips.replaceChildren();
+      for (const item of (data.stack || []).slice(0, 10)) {
+        const chip = document.createElement('span');
+        chip.className = 'teardown-chip';
+        chip.textContent = [item.category, item.version].filter(Boolean).join(' ');
+        teardownChips.appendChild(chip);
+      }
+      const totals = data.totals || {};
+      teardownTotals.textContent =
+        (totals.files || 0) + ' files · ' + Number(totals.bytes || 0).toLocaleString() + ' bytes';
+      fitTeardown();
+    }
+
+    async function startTeardown(site, question) {
+      teardownShow(site);
+      teardownStart = performance.now();
+      toast('Taking it apart, sir.');
+      teardownPollId = window.setInterval(async () => {
+        try {
+          const response = await fetch('/teardown/status', { cache: 'no-store' });
+          const status = await response.json();
+          if (status.active) teardownSetStep(status.step || 1, status.label);
+        } catch {
+          /* the poll is cosmetic; the request still decides */
+        }
+      }, 700);
+      try {
+        const response = await fetch('/teardown/compose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: site,
+            ask: question || 'What is this site and how does it work?'
+          })
+        });
+        const data = await response.json();
+        window.clearInterval(teardownPollId);
+        teardownPollId = 0;
+        if (!data.ok) {
+          teardownHide();
+          toast(data.reply || 'The teardown failed.');
+          speak(data.reply || "I'm afraid the teardown failed, sir.");
+          return;
+        }
+        for (const record of (data.notes || [])) {
+          if (record && Number.isInteger(record.id)) addNote(record);
+        }
+        teardownLast = data;
+        teardownFinish(data);
+        const reply = data.summary || data.reply || 'Teardown filed, sir.';
+        recordMessage('assistant', reply, []);
+        addMessage('assistant', reply, []);
+        speak(data.spoken || reply);
+      } catch (error) {
+        window.clearInterval(teardownPollId);
+        teardownPollId = 0;
+        teardownHide();
+        toast('The teardown could not be completed.');
+        speak("I'm afraid the teardown failed, sir.");
+      }
+    }
+
+    async function showLastTeardown() {
+      try {
+        const response = await fetch('/teardown/last', { cache: 'no-store' });
+        const data = await response.json();
+        if (!data.ok) {
+          toast(data.reply || 'No teardown has been filed yet, sir.');
+          return;
+        }
+        teardownSite.textContent = data.label || 'last teardown';
+        teardownLast = data;
+        teardownFinish({ stack: [], totals: {} });
+        openTeardownReader(data.full_note, data.note_file);
+      } catch {
+        toast('No teardown has been filed yet, sir.');
+      }
+    }
+
+    function openTeardownReader(fullNote, file) {
+      readerBody.textContent = String(fullNote || '');
+      readerObsidian.dataset.file = String(file || '');
+      teardownReader.classList.add('open');
+      teardownReader.setAttribute('aria-hidden', 'false');
+    }
+
+    async function cancelTeardown() {
+      try {
+        await fetch('/teardown/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        toast('Stopping the teardown, sir.');
+      } catch {
+        toast('Nothing is running, sir.');
+      }
+    }
+
+    function handleTeardownText(text) {
+      const clean = cleanThought(text);
+      if (TEARDOWN_SITE_RE.test(clean)) {
+        const address = speechToAddress(clean);
+        if (address) {
+          startTeardown(address, clean);
+          return true;
+        }
+      }
+      if (TEARDOWN_THIS_RE.test(clean)) {
+        startTeardown('this', 'What is this site and how does it work?');
+        return true;
+      }
+      if (LAST_TEARDOWN_RE.test(clean)) {
+        showLastTeardown();
+        return true;
+      }
+      if (OPEN_TEARDOWN_RE.test(clean)) {
+        openTeardownReader(teardownLast && teardownLast.full_note, teardownLast && teardownLast.note_file);
+        return true;
+      }
+      if (CLOSE_TEARDOWN_RE.test(clean)) {
+        teardownHide();
+        return true;
+      }
+      if (CANCEL_TEARDOWN_RE.test(clean)) {
+        cancelTeardown();
+        return true;
+      }
+      return false;
+    }
+
+    registerVoiceRoute({
+      name: 'teardown-live',
+      pattern: TEARDOWN_SITE_RE,
+      handler(text) {
+        const address = speechToAddress(text);
+        if (address) startTeardown(address, cleanThought(text));
+      }
+    });
+    registerVoiceRoute({
+      name: 'teardown-this',
+      pattern: TEARDOWN_THIS_RE,
+      handler() {
+        startTeardown('this', 'What is this site and how does it work?');
+      }
+    });
+    registerVoiceRoute({ name: 'teardown-last', pattern: LAST_TEARDOWN_RE, handler() { showLastTeardown(); } });
+    registerVoiceRoute({ name: 'teardown-open', pattern: OPEN_TEARDOWN_RE, handler() { openTeardownReader(teardownLast && teardownLast.full_note, teardownLast && teardownLast.note_file); } });
+    registerVoiceRoute({ name: 'teardown-close', pattern: CLOSE_TEARDOWN_RE, handler() { teardownHide(); } });
+    registerVoiceRoute({ name: 'teardown-cancel', pattern: CANCEL_TEARDOWN_RE, handler() { cancelTeardown(); } });
+
+    $('teardown-read').addEventListener('click', () => {
+      const data = teardownLast || {};
+      openTeardownReader(data.full_note, data.note_file);
+    });
+    $('reader-close').addEventListener('click', () => {
+      teardownReader.classList.remove('open');
+      teardownReader.setAttribute('aria-hidden', 'true');
+    });
+    $('reader-done').addEventListener('click', () => {
+      teardownReader.classList.remove('open');
+      teardownReader.setAttribute('aria-hidden', 'true');
+    });
+    readerObsidian.addEventListener('click', () => {
+      const file = readerObsidian.dataset.file || '';
+      if (file) location.href = 'obsidian://open?file=' + encodeURIComponent(file);
+    });
+    window.addEventListener('resize', fitTeardown);
+
+    if (new URLSearchParams(location.search).has('debug')) {
+      window.__kgRouteCheck = (text) => {
+        const route = matchVoiceRoute(text, false);
+        return route ? route.name : null;
+      };
+      window.__kgTeardownPanel = () => ({
+        shown: teardownPanel.classList.contains('show'),
+        site: teardownSite.textContent,
+        done: teardownDone.classList.contains('show'),
+        line: teardownLine.textContent,
+        steps: [...teardownSteps.children].map((item) => ({ text: item.textContent, cls: item.className })),
+        snapshot: getComputedStyle(teardownShot).display,
+        chips: teardownChips.children.length,
+        totals: teardownTotals.textContent,
+        readerOpen: teardownReader.classList.contains('open')
+      });
+      window.__kgTeardownLast = () =>
+        teardownLast
+          ? { label: teardownLast.label, spoken: teardownLast.spoken, stack: teardownLast.stack, totals: teardownLast.totals }
+          : null;
+    }
 
     const GROUP_COLORS = {
       Company: '#67e8f9',
@@ -2110,6 +2497,8 @@
     async function ask(question) {
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
+
+      if (handleTeardownText(text)) return;
 
       // "Remember that ..." is a capture, typed or spoken, not a question.
       const captured = text.match(REMEMBER_RE);
