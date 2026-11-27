@@ -3,7 +3,8 @@
 A cinematic 3D map of a small business's knowledge base. Thirty Markdown notes become
 glowing, connected stars; clicking one flies the camera to it and opens its excerpt.
 A chat bar answers questions using **only those notes**, through a FreeLLMAPI
-(OpenAI-compatible) gateway.
+(OpenAI-compatible) gateway. Chats can be collapsed, closed, and reopened, and
+past conversations are saved in the browser so you can continue them later.
 
 **Live demo:** <https://jarvis-codebase.vercel.app> — the 3D galaxy and
 `GET /api/chat` health check work now. The Vercel project has the FreeLLMAPI
@@ -57,8 +58,10 @@ If the key is missing or still a placeholder, the UI shows a clean
 - Retrieval is keyword overlap with a higher weight on titles, top 6 notes. The
   prompt includes only those titles/excerpts; the answer is limited to 2–3 sentences.
 - Conversation history is bounded to the last 6 short turns. On Vercel the browser
-  sends `sessionStorage` history with each request (no Python globals); the server
-  sanitizes it and re-asserts the notes-only reminder.
+  sends the active session's history with each request (no Python globals); the
+  server sanitizes it and re-asserts the notes-only reminder. Locally the server
+  also keeps a bounded in-memory fallback, but sanitized client history wins so
+  restored sessions keep their context.
 - `POST /chat` (local) and `POST /api/chat` (Vercel) return exactly:
 
 ```json
@@ -68,6 +71,25 @@ If the key is missing or still a placeholder, the UI shows a clean
 `nodes` is `[]` when no note is relevant. Errors return `{ "error", "code", "nodes": [] }`
 with a safe message for missing config, auth failure, rate limiting, timeout, and
 malformed upstream responses.
+
+## Chat controls and history
+
+- **History** opens a browser-local list of saved conversations. Pick one to restore
+  it, continue it, or delete it individually. **+ New chat** starts fresh, and
+  **Clear all** removes every saved chat after a confirmation prompt.
+- **Collapse** hides the transcript while leaving the input available; **Close**
+  hides the whole panel and shows an “Ask your notes” launcher at the bottom of the
+  screen. Sending a question automatically expands and reopens the chat.
+- History lives in `localStorage` under `kg_chat_sessions_v1`, with the active
+  session in `kg_active_session`. Up to 20 sessions and 60 messages per session are
+  kept; only the last 6 messages are sent to the API. Collapse/close state is kept
+  in `sessionStorage` (`kg_chat_collapsed`, `kg_chat_closed`) so it survives a
+  reload but resets in a new tab.
+- History is per browser and per origin. It is not synced to Vercel, and clearing
+  site data removes it. Legacy `kg_session_id` / `kg_history` data is migrated
+  automatically on first load.
+- Buttons are disabled while a request is in flight so a reply cannot land in the
+  wrong conversation.
 
 ## Deploy to Vercel
 
@@ -140,9 +162,10 @@ Without a key, each of these should return the clean “not configured” messag
 Deployment checks already performed:
 
 - Homepage returns 200 and renders 30 nodes / 90 links / 6 groups with no console errors.
-- `GET /api/chat` returns `{"ok": true, "notes": 30, "configured": false}`.
-- `POST /api/chat` returns the clean 503 `not_configured` JSON; the browser shows the
-  message without leaking internals.
+- The History, Collapse, and Close controls work on the deployed site; saved sessions
+  restore across reloads, and the launcher reopens a closed chat.
+- `POST /api/chat` returns a clean `503 config_invalid` while `FREELLMAPI_BASE_URL`
+  points at localhost; no key or internal detail leaks.
 - `/config.json` returns 404 on both local and Vercel; no key literal appears in HTML/JS.
 
 > Note: `vercel curl` was used once for verification and added a Deployment Protection

@@ -291,7 +291,6 @@
       gap: 8px;
       pointer-events: none;
     }
-    .chat > * { pointer-events: auto; }
     .chat-log {
       display: flex;
       flex-direction: column;
@@ -299,12 +298,14 @@
       max-height: min(42vh, 380px);
       overflow-y: auto;
       padding: 4px 4px 0;
+      pointer-events: none;
       scrollbar-width: thin;
       scrollbar-color: rgba(103, 232, 249, 0.3) transparent;
     }
     .chat-log:empty { display: none; }
     .message {
       max-width: 88%;
+      pointer-events: auto;
       border: 1px solid var(--line);
       border-radius: 15px;
       padding: 10px 13px;
@@ -337,12 +338,13 @@
     .typing i:nth-child(2) { animation-delay: 0.15s; }
     .typing i:nth-child(3) { animation-delay: 0.3s; }
 
-    .chat-form { width: 100%; }
+    .chat-form { width: 100%; pointer-events: none; }
     .chat-input-wrap {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 8px 8px 8px 16px;
+      pointer-events: auto;
       border: 1px solid rgba(148, 184, 224, 0.22);
       border-radius: 999px;
       background: rgba(7, 14, 25, 0.82);
@@ -385,6 +387,7 @@
     #chat-send svg { width: 16px; height: 16px; }
     .chat-hint {
       margin: 7px 0 0;
+      pointer-events: none;
       color: #627b96;
       font-size: 9.5px;
       text-align: center;
@@ -393,6 +396,155 @@
     }
     .chat-hint .status { color: var(--cyan); }
     .chat-hint .status.error { color: #fb7185; }
+
+    .chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 4px 2px;
+      pointer-events: none;
+    }
+    .chat-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #93abc4;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .chat-label::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 9px var(--cyan);
+    }
+    .chat-tools { display: flex; align-items: center; gap: 4px; pointer-events: auto; }
+    .chat-tool {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(148, 184, 224, 0.15);
+      border-radius: 8px;
+      background: rgba(7, 14, 25, 0.58);
+      color: #93abc4;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+    .chat-tool:hover { color: #fff; border-color: rgba(103, 232, 249, 0.4); background: rgba(103, 232, 249, 0.08); }
+    .chat-tool:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    .chat-tool svg { width: 13px; height: 13px; transition: transform 180ms ease; }
+    .chat-tool-text {
+      width: auto;
+      padding: 0 9px;
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .chat.collapsed .chat-log { display: none; }
+    .chat.collapsed #chat-collapse svg { transform: rotate(180deg); }
+    .chat.closed { display: none; }
+
+    .chat-launcher {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      z-index: 15;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(103, 232, 249, 0.28);
+      border-radius: 999px;
+      background: rgba(7, 14, 25, 0.9);
+      padding: 10px 18px;
+      color: #dff8ff;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      backdrop-filter: blur(18px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.46), 0 0 26px rgba(103, 232, 249, 0.13);
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+    .chat-launcher.show { display: inline-flex; }
+    .chat-launcher:hover { border-color: rgba(103, 232, 249, 0.6); background: rgba(11, 26, 42, 0.95); transform: translateX(-50%) translateY(-1px); }
+    .chat-launcher:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+    .chat-launcher span { color: var(--cyan); text-shadow: 0 0 12px rgba(103, 232, 249, 0.8); }
+
+    .history-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(2, 6, 12, 0.62);
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 200ms ease, visibility 200ms ease;
+    }
+    .history-overlay.open { opacity: 1; visibility: visible; pointer-events: auto; }
+    .history-card {
+      width: min(560px, 100%);
+      max-height: min(76vh, 620px);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      border: 1px solid rgba(148, 184, 224, 0.2);
+      border-radius: 22px;
+      background: linear-gradient(160deg, rgba(12, 22, 38, 0.97), rgba(5, 10, 19, 0.97));
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transform: translateY(10px) scale(0.985);
+      transition: transform 200ms ease;
+    }
+    .history-overlay.open .history-card { transform: none; }
+    .history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+    .history-head h2 { margin: 2px 0 0; font-size: 24px; font-weight: 500; letter-spacing: -0.02em; }
+    .history-sub { margin: 6px 0 0; color: #7d95b0; font-size: 11px; line-height: 1.5; }
+    .history-list { display: flex; flex-direction: column; gap: 6px; min-height: 60px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: rgba(103, 232, 249, 0.3) transparent; }
+    .history-empty { margin: 0; padding: 26px 12px; color: #7d95b0; font-size: 12px; line-height: 1.65; text-align: center; }
+    .history-item { display: flex; align-items: stretch; gap: 6px; }
+    .history-open {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: rgba(148, 184, 224, 0.04);
+      padding: 9px 11px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease;
+    }
+    .history-open:hover { background: rgba(103, 232, 249, 0.08); border-color: rgba(103, 232, 249, 0.22); }
+    .history-item.active .history-open { border-color: rgba(103, 232, 249, 0.42); background: rgba(103, 232, 249, 0.1); }
+    .history-open:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+    .history-item-title { display: block; overflow: hidden; color: #e6f3ff; font-size: 12.5px; white-space: nowrap; text-overflow: ellipsis; }
+    .history-item-meta { display: block; margin-top: 3px; color: #6f89a6; font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.04em; }
+    .history-delete {
+      width: 30px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      color: #6f89a6;
+      font-size: 15px;
+      cursor: pointer;
+      transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+    }
+    .history-delete:hover { color: #fecdd3; background: rgba(251, 113, 133, 0.08); border-color: rgba(251, 113, 133, 0.25); }
+    .history-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .history-actions .ghost-btn { padding: 8px 13px; font-size: 11px; }
+    .history-actions .danger:hover { color: #fecdd3; border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.08); }
 
     .loader {
       position: fixed;
@@ -501,6 +653,13 @@
       .chat-log { max-height: 34vh; }
       .message { max-width: 94%; }
       .chat-hint { font-size: 8.5px; }
+      .chat-head { padding: 0 2px 1px; }
+      .chat-label { font-size: 8px; letter-spacing: 0.12em; }
+      .chat-tool { width: 24px; height: 24px; font-size: 14px; }
+      .chat-tool-text { padding: 0 7px; font-size: 8px; }
+      .chat-launcher { bottom: 12px; padding: 9px 15px; font-size: 11px; }
+      .history-card { max-height: 80vh; padding: 16px; }
+      .history-head h2 { font-size: 21px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -544,7 +703,17 @@
     <button id="panel-ask" class="ask-btn" type="button">Ask about this note →</button>
   </aside>
 
-  <section class="chat" aria-label="Ask your notes">
+  <section class="chat" id="chat" aria-label="Ask your notes">
+    <div class="chat-head">
+      <span class="chat-label">Ask your notes</span>
+      <div class="chat-tools">
+        <button id="chat-history" class="chat-tool chat-tool-text" type="button" title="View saved chats" aria-label="View saved chats">History</button>
+        <button id="chat-collapse" class="chat-tool" type="button" title="Collapse chat" aria-label="Collapse chat" aria-expanded="true" aria-controls="chat-log">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <button id="chat-close" class="chat-tool" type="button" title="Close chat" aria-label="Close chat">×</button>
+      </div>
+    </div>
     <div id="chat-log" class="chat-log" aria-live="polite"></div>
     <form id="chat-form" class="chat-form" autocomplete="off">
       <div class="chat-input-wrap">
@@ -557,6 +726,28 @@
       <p class="chat-hint">Answers use only your notes. <span id="chat-status" class="status"></span></p>
     </form>
   </section>
+
+  <button id="chat-launcher" class="chat-launcher" type="button" aria-label="Open chat">
+    <span aria-hidden="true">✦</span> Ask your notes
+  </button>
+
+  <div id="history-overlay" class="history-overlay" aria-hidden="true">
+    <div class="history-card" role="dialog" aria-modal="true" aria-labelledby="history-title">
+      <div class="history-head">
+        <div>
+          <p class="eyebrow">Saved in this browser</p>
+          <h2 id="history-title">Chat history</h2>
+          <p class="history-sub">Open a past chat to continue it, or start a new one.</p>
+        </div>
+        <button id="history-close" class="icon-btn" type="button" aria-label="Close chat history">×</button>
+      </div>
+      <div id="history-list" class="history-list"></div>
+      <div class="history-actions">
+        <button id="history-new" class="ghost-btn" type="button">+ New chat</button>
+        <button id="history-clear" class="ghost-btn danger" type="button">Clear all</button>
+      </div>
+    </div>
+  </div>
 
   <div id="loader" class="loader">
     <div class="loader-orbit" aria-hidden="true"><span></span></div>
@@ -602,6 +793,11 @@
     const chatInput = $('chat-input');
     const chatSend = $('chat-send');
     const chatStatus = $('chat-status');
+    const chatEl = $('chat');
+    const chatLauncher = $('chat-launcher');
+    const chatCollapse = $('chat-collapse');
+    const historyOverlay = $('history-overlay');
+    const historyList = $('history-list');
     const toastEl = $('toast');
     const legendEl = $('legend');
 
@@ -1110,41 +1306,387 @@
       (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '4700';
     const CHAT_ENDPOINT = window.KG_CHAT_ENDPOINT || (isLocal4700 ? '/chat' : '/api/chat');
 
-    let sessionId = '';
-    try {
-      sessionId = localStorage.getItem('kg_session_id') || '';
-      if (!sessionId) {
-        sessionId =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-        localStorage.setItem('kg_session_id', sessionId);
-      }
-    } catch {
-      sessionId = 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    }
+    const SESSIONS_KEY = 'kg_chat_sessions_v1';
+    const ACTIVE_KEY = 'kg_active_session';
+    const COLLAPSED_KEY = 'kg_chat_collapsed';
+    const CLOSED_KEY = 'kg_chat_closed';
+    const MAX_SESSIONS = 20;
+    const MAX_STORED_MESSAGES = 60;
 
-    let history = [];
-    try {
-      const stored = sessionStorage.getItem('kg_history');
-      const parsed = stored ? JSON.parse(stored) : [];
-      if (Array.isArray(parsed)) {
-        history = parsed
-          .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
-          .slice(-6);
-      }
-    } catch {
-      history = [];
-    }
+    let sessions = [];
+    let activeId = '';
+    let historyFocus = null;
+    let busy = false;
 
-    function saveHistory() {
-      history = history.slice(-6);
+    function newSessionId() {
       try {
-        sessionStorage.setItem('kg_history', JSON.stringify(history));
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+      } catch {
+        /* fall through */
+      }
+      return 's_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+
+    function readStore(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeStore(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function readSessionFlag(key) {
+      try {
+        return sessionStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+
+    function writeSessionFlag(key, value) {
+      try {
+        if (value === null) sessionStorage.removeItem(key);
+        else sessionStorage.setItem(key, value);
       } catch {
         /* storage may be unavailable in private mode */
       }
     }
+
+    function cleanMessage(item) {
+      if (!item || typeof item !== 'object') return null;
+      if (item.role !== 'user' && item.role !== 'assistant') return null;
+      if (typeof item.content !== 'string') return null;
+      const content = item.content.replace(/\s+/g, ' ').trim().slice(0, 4000);
+      if (!content) return null;
+      const message = { role: item.role, content };
+      const ids = Array.isArray(item.nodes)
+        ? item.nodes.filter((id) => Number.isInteger(id) && id >= 0).slice(0, 12)
+        : [];
+      if (ids.length) message.nodes = ids;
+      return message;
+    }
+
+    function deriveTitle(messages) {
+      const first = messages.find((item) => item.role === 'user');
+      return first ? first.content.slice(0, 64) : 'New chat';
+    }
+
+    function cleanSession(raw) {
+      if (!raw || typeof raw !== 'object') return null;
+      if (typeof raw.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(raw.id)) return null;
+      const messages = Array.isArray(raw.messages)
+        ? raw.messages.map(cleanMessage).filter(Boolean).slice(-MAX_STORED_MESSAGES)
+        : [];
+      const createdAt = Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now();
+      const updatedAt = Number.isFinite(raw.updatedAt) ? raw.updatedAt : createdAt;
+      const title =
+        typeof raw.title === 'string' && raw.title.trim()
+          ? raw.title.trim().slice(0, 80)
+          : deriveTitle(messages);
+      return { id: raw.id, title, createdAt, updatedAt, messages };
+    }
+
+    function saveSessions() {
+      sessions = sessions.slice(0, MAX_SESSIONS);
+      if (!writeStore(SESSIONS_KEY, sessions)) {
+        sessions = sessions.map((session) => ({ ...session, messages: session.messages.slice(-20) }));
+        writeStore(SESSIONS_KEY, sessions);
+      }
+      try {
+        if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
+        else localStorage.removeItem(ACTIVE_KEY);
+      } catch {
+        /* storage may be unavailable */
+      }
+    }
+
+    function activeSession() {
+      return sessions.find((session) => session.id === activeId) || null;
+    }
+
+    function migrateLegacyChat() {
+      if (sessions.length) return;
+      let legacyId = '';
+      let legacy = [];
+      try {
+        legacyId = localStorage.getItem('kg_session_id') || '';
+      } catch {
+        legacyId = '';
+      }
+      try {
+        const raw = sessionStorage.getItem('kg_history');
+        legacy = raw ? JSON.parse(raw) : [];
+      } catch {
+        legacy = [];
+      }
+      const messages = Array.isArray(legacy)
+        ? legacy.map(cleanMessage).filter(Boolean).slice(-MAX_STORED_MESSAGES)
+        : [];
+      if (!messages.length) return;
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(legacyId)) legacyId = newSessionId();
+      const now = Date.now();
+      sessions = [{ id: legacyId, title: deriveTitle(messages), createdAt: now, updatedAt: now, messages }];
+      activeId = legacyId;
+      saveSessions();
+      try {
+        localStorage.removeItem('kg_session_id');
+        sessionStorage.removeItem('kg_history');
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function loadSessions() {
+      const stored = readStore(SESSIONS_KEY, []);
+      sessions = Array.isArray(stored) ? stored.map(cleanSession).filter(Boolean) : [];
+      const seen = new Set();
+      sessions = sessions
+        .filter((session) => !seen.has(session.id) && seen.add(session.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, MAX_SESSIONS);
+      try {
+        activeId = localStorage.getItem(ACTIVE_KEY) || '';
+      } catch {
+        activeId = '';
+      }
+      migrateLegacyChat();
+      if (activeId && !sessions.some((session) => session.id === activeId)) activeId = '';
+    }
+
+    function ensureSession(title) {
+      let session = activeSession();
+      if (session) return session;
+      const now = Date.now();
+      session = {
+        id: newSessionId(),
+        title: String(title || 'New chat').replace(/\s+/g, ' ').trim().slice(0, 64) || 'New chat',
+        createdAt: now,
+        updatedAt: now,
+        messages: []
+      };
+      sessions.unshift(session);
+      activeId = session.id;
+      saveSessions();
+      return session;
+    }
+
+    function recordMessage(role, text, sourceIds = []) {
+      const session = ensureSession(role === 'user' ? text : '');
+      const message = { role, content: text };
+      const ids = sourceIds.filter((id) => Number.isInteger(id) && nodes[id]);
+      if (ids.length) message.nodes = ids;
+      session.messages.push(message);
+      session.messages = session.messages.slice(-MAX_STORED_MESSAGES);
+      session.updatedAt = Date.now();
+      if (role === 'user' && (!session.title || session.title === 'New chat')) {
+        session.title = text.slice(0, 64);
+      }
+      saveSessions();
+      if (historyOverlay.classList.contains('open')) renderHistoryList();
+      return session;
+    }
+
+    function rollbackLastUser() {
+      const session = activeSession();
+      if (!session) return;
+      const last = session.messages[session.messages.length - 1];
+      if (!last || last.role !== 'user') return;
+      session.messages.pop();
+      session.updatedAt = Date.now();
+      if (!session.messages.length) {
+        sessions = sessions.filter((item) => item.id !== session.id);
+        activeId = '';
+      }
+      saveSessions();
+      if (historyOverlay.classList.contains('open')) renderHistoryList();
+    }
+
+    function historyForApi() {
+      const session = activeSession();
+      if (!session) return [];
+      return session.messages.slice(-6).map((item) => ({ role: item.role, content: item.content }));
+    }
+
+    function formatWhen(timestamp) {
+      try {
+        return new Date(timestamp).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        });
+      } catch {
+        return '';
+      }
+    }
+
+    function renderHistoryList() {
+      historyList.replaceChildren();
+      if (!sessions.length) {
+        const empty = document.createElement('p');
+        empty.className = 'history-empty';
+        empty.textContent = 'No saved chats yet. Ask a question and it will appear here.';
+        historyList.appendChild(empty);
+        return;
+      }
+      const ordered = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+      for (const session of ordered) {
+        const item = document.createElement('div');
+        item.className = 'history-item' + (session.id === activeId ? ' active' : '');
+
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'history-open';
+        open.title = session.title || 'Untitled chat';
+        const title = document.createElement('span');
+        title.className = 'history-item-title';
+        title.textContent = session.title || 'Untitled chat';
+        const meta = document.createElement('span');
+        meta.className = 'history-item-meta';
+        const count = session.messages.length;
+        meta.textContent = count + ' message' + (count === 1 ? '' : 's') + ' · ' + formatWhen(session.updatedAt);
+        open.append(title, meta);
+        open.addEventListener('click', () => openSession(session.id));
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'history-delete';
+        remove.setAttribute('aria-label', 'Delete chat: ' + (session.title || 'Untitled chat'));
+        remove.title = 'Delete this chat';
+        remove.textContent = '×';
+        remove.addEventListener('click', () => deleteSession(session.id));
+
+        item.append(open, remove);
+        historyList.appendChild(item);
+      }
+    }
+
+    function renderActiveSession() {
+      chatLog.replaceChildren();
+      const session = activeSession();
+      if (!session) return;
+      for (const message of session.messages) {
+        addMessage(message.role, message.content, message.nodes || [], false);
+      }
+    }
+
+    function openHistory() {
+      renderHistoryList();
+      historyFocus =
+        document.activeElement && document.activeElement !== document.body
+          ? document.activeElement
+          : $('chat-history');
+      historyOverlay.classList.add('open');
+      historyOverlay.setAttribute('aria-hidden', 'false');
+      window.setTimeout(() => {
+        if (historyOverlay.classList.contains('open')) $('history-close').focus();
+      }, 220);
+    }
+
+    function closeHistory() {
+      if (!historyOverlay.classList.contains('open')) return;
+      historyOverlay.classList.remove('open');
+      historyOverlay.setAttribute('aria-hidden', 'true');
+      if (historyFocus && typeof historyFocus.focus === 'function') historyFocus.focus();
+    }
+
+    function openSession(id) {
+      if (busy) return;
+      const session = sessions.find((item) => item.id === id);
+      if (!session) return;
+      activeId = id;
+      saveSessions();
+      renderActiveSession();
+      setChatClosed(false);
+      setCollapsed(false);
+      closeHistory();
+      chatInput.focus();
+      toast('Loaded chat: ' + (session.title || 'Untitled chat'));
+    }
+
+    function deleteSession(id) {
+      if (busy) return;
+      const session = sessions.find((item) => item.id === id);
+      sessions = sessions.filter((item) => item.id !== id);
+      if (activeId === id) {
+        activeId = '';
+        chatLog.replaceChildren();
+      }
+      saveSessions();
+      renderHistoryList();
+      if (session) toast('Deleted chat: ' + (session.title || 'Untitled chat'));
+    }
+
+    function startNewChat() {
+      if (busy) return;
+      activeId = '';
+      chatLog.replaceChildren();
+      saveSessions();
+      closeHistory();
+      setChatClosed(false);
+      setCollapsed(false);
+      chatInput.focus();
+    }
+
+    function clearAllSessions() {
+      if (busy || !sessions.length) return;
+      if (!window.confirm('Delete all saved chats from this browser?')) return;
+      sessions = [];
+      activeId = '';
+      chatLog.replaceChildren();
+      saveSessions();
+      renderHistoryList();
+      toast('Chat history cleared.');
+    }
+
+    function setCollapsed(collapsed) {
+      chatEl.classList.toggle('collapsed', collapsed);
+      chatCollapse.setAttribute('aria-expanded', String(!collapsed));
+      chatCollapse.setAttribute('aria-label', collapsed ? 'Expand chat' : 'Collapse chat');
+      chatCollapse.title = collapsed ? 'Expand chat' : 'Collapse chat';
+      writeSessionFlag(COLLAPSED_KEY, collapsed ? '1' : '0');
+    }
+
+    function setChatClosed(closed) {
+      chatEl.classList.toggle('closed', closed);
+      chatLauncher.classList.toggle('show', closed);
+      writeSessionFlag(CLOSED_KEY, closed ? '1' : '0');
+      if (closed) closeHistory();
+    }
+
+    chatCollapse.addEventListener('click', () => setCollapsed(!chatEl.classList.contains('collapsed')));
+    $('chat-close').addEventListener('click', () => setChatClosed(true));
+    chatLauncher.addEventListener('click', () => {
+      setChatClosed(false);
+      chatInput.focus();
+    });
+    $('chat-history').addEventListener('click', openHistory);
+    $('history-close').addEventListener('click', closeHistory);
+    $('history-new').addEventListener('click', startNewChat);
+    $('history-clear').addEventListener('click', clearAllSessions);
+    historyOverlay.addEventListener('click', (event) => {
+      if (event.target === historyOverlay) closeHistory();
+    });
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if (event.key === 'Escape' && historyOverlay.classList.contains('open')) {
+          event.stopImmediatePropagation();
+          closeHistory();
+        }
+      },
+      true
+    );
 
     function scrollChat() {
       chatLog.scrollTop = chatLog.scrollHeight;
@@ -1193,10 +1735,11 @@
       return message;
     }
 
-    function setBusy(busy) {
-      chatSend.disabled = busy;
-      chatInput.disabled = busy;
-      chatStatus.textContent = busy ? 'thinking…' : '';
+    function setBusy(isBusy) {
+      busy = isBusy;
+      chatSend.disabled = isBusy;
+      chatInput.disabled = isBusy;
+      chatStatus.textContent = isBusy ? 'thinking…' : '';
       chatStatus.classList.toggle('error', false);
     }
 
@@ -1204,10 +1747,12 @@
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
 
-      const priorHistory = history.slice(-6);
+      setChatClosed(false);
+      if (chatEl.classList.contains('collapsed')) setCollapsed(false);
+
+      const priorHistory = historyForApi();
+      recordMessage('user', text);
       addMessage('user', text);
-      history.push({ role: 'user', content: text });
-      saveHistory();
       setBusy(true);
       const typing = addTyping();
 
@@ -1215,7 +1760,7 @@
         const response = await fetch(CHAT_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: text, session_id: sessionId, history: priorHistory })
+          body: JSON.stringify({ question: text, session_id: activeId, history: priorHistory })
         });
         const raw = await response.text();
         let data;
@@ -1234,9 +1779,8 @@
           : [];
 
         typing.remove();
+        recordMessage('assistant', answer, ids);
         addMessage('assistant', answer, ids);
-        history.push({ role: 'assistant', content: answer });
-        saveHistory();
         cited = new Set(ids);
         applyFocus();
         if (ids.length === 0) {
@@ -1244,8 +1788,7 @@
         }
       } catch (error) {
         typing.remove();
-        if (history.length && history[history.length - 1].role === 'user') history.pop();
-        saveHistory();
+        rollbackLastUser();
         const message = error && error.message ? error.message : 'Something went wrong. Please try again.';
         addMessage('error', message);
         toast(message);
@@ -1269,7 +1812,10 @@
       chatStatus.classList.add('error');
     }
 
-    for (const item of history) addMessage(item.role, item.content, [], false);
+    loadSessions();
+    renderActiveSession();
+    setChatClosed(readSessionFlag(CLOSED_KEY) === '1');
+    setCollapsed(readSessionFlag(COLLAPSED_KEY) === '1');
 
     window.__kgModuleDone = true;
 

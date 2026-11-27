@@ -349,11 +349,12 @@ def _clean_session_id(value) -> str:
 
 
 def get_history(session_id: str, client_history) -> list[dict]:
+    cleaned = sanitize_history(client_history)
+    if cleaned:
+        return cleaned
     if _STORE is not None:
-        stored = _STORE.get(session_id)
-        if stored:
-            return stored
-    return sanitize_history(client_history)
+        return _STORE.get(session_id)
+    return []
 
 
 def _retrieval_query(history: list[dict]) -> str:
