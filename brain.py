@@ -275,6 +275,14 @@ def note_count() -> int:
         return 0
 
 
+def reload_graph() -> list[dict]:
+    """Forget the cached graph so the next load re-reads graph.json from disk."""
+    global _graph_cache
+    with _graph_lock:
+        _graph_cache = None
+    return load_graph()
+
+
 def sanitize_history(raw, max_messages: int = MAX_HISTORY_MESSAGES) -> list[dict]:
     if not isinstance(raw, list):
         return []
@@ -413,11 +421,14 @@ def _note_block(notes: list[dict]) -> str:
     )
 
 
-def build_messages(question: str, notes: list[dict], history: list[dict]) -> list[dict]:
+def build_messages(
+    question: str, notes: list[dict], history: list[dict], persona: str | None = None
+) -> list[dict]:
+    instructions = persona.strip() if isinstance(persona, str) and persona.strip() else SYSTEM_PROMPT
     messages = [
         {
             "role": "system",
-            "content": f"{SYSTEM_PROMPT}\n\nNOTES (the only source of truth):\n{_note_block(notes)}",
+            "content": f"{instructions}\n\nNOTES (the only source of truth):\n{_note_block(notes)}",
         }
     ]
     messages.extend(history)
@@ -556,7 +567,7 @@ def _call_llm(config: dict, messages: list[dict]) -> str:
             {
                 "model": config["model"],
                 "messages": messages,
-                "temperature": 0.2,
+                "temperature": 0.6,
                 "max_tokens": max_tokens,
                 "stream": False,
             },
@@ -582,7 +593,13 @@ def _clean_answer(value: str) -> str:
     return value
 
 
-def answer_question(question, session_id=None, client_history=None) -> dict:
+def answer_question(
+    question,
+    session_id=None,
+    client_history=None,
+    persona=None,
+    empty_reply=None,
+) -> dict:
     if not isinstance(question, str):
         raise BrainError(400, "invalid_request", "Please send a question as text.")
     question = re.sub(r"\s+", " ", question).strip()
@@ -602,15 +619,19 @@ def answer_question(question, session_id=None, client_history=None) -> dict:
 
     if not notes:
         answer = (
-            "I couldn't find any notes relevant to that question. "
-            "Try asking about a topic covered in your knowledge galaxy."
+            empty_reply.strip()
+            if isinstance(empty_reply, str) and empty_reply.strip()
+            else (
+                "I couldn't find any notes relevant to that question. "
+                "Try asking about a topic covered in your knowledge galaxy."
+            )
         )
         if _STORE is not None:
             _STORE.append(session, question, answer)
         return {"answer": answer, "nodes": []}
 
     config = get_config(require_key=True)
-    messages = build_messages(question, notes, history)
+    messages = build_messages(question, notes, history, persona)
     answer = _clean_answer(_call_llm(config, messages))
     if _STORE is not None:
         _STORE.append(session, question, answer)

@@ -291,6 +291,22 @@
       gap: 8px;
       pointer-events: none;
     }
+    .boot-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 3px 2px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(148, 163, 184, 0.72);
+    }
+    .boot-line b {
+      font-weight: 500;
+      color: rgba(226, 232, 240, 0.94);
+    }
     .chat-log {
       display: flex;
       flex-direction: column;
@@ -753,6 +769,10 @@
         <button id="chat-close" class="chat-tool" type="button" title="Close chat" aria-label="Close chat">×</button>
       </div>
     </div>
+    <p id="boot-line" class="boot-line">
+      <b>Hello, sir.</b>
+      <span><span id="boot-notes">—</span> notes indexed</span>
+    </p>
     <div id="chat-log" class="chat-log" aria-live="polite"></div>
     <p id="voice-line" class="voice-line" data-state="idle" role="status" aria-live="polite">
       <span class="voice-dot" aria-hidden="true"></span>
@@ -966,6 +986,7 @@
     }
 
     $('stat-notes').textContent = String(nodes.length);
+    $('boot-notes').textContent = String(nodes.length);
     $('stat-links').textContent = String(links.length);
     $('stat-groups').textContent = String(groups.length);
 
@@ -2064,14 +2085,17 @@
         const ids = Array.isArray(data.nodes)
           ? data.nodes.filter((id) => Number.isInteger(id) && nodes[id])
           : [];
-        // Off-topic answers get no citation claim they cannot back up.
-        const citedIds = intent.aboutNotes ? ids : [];
+        // A receipt means the server actually did something; the retrieved
+        // notes were the excuse for asking, not the source of the answer.
+        const actionAnswer = Array.isArray(data.receipts) && data.receipts.length > 0;
+        // Off-topic and action answers get no citation claim they cannot back up.
+        const citedIds = intent.aboutNotes && !actionAnswer ? ids : [];
 
         typing.remove();
         recordMessage('assistant', answer, citedIds);
         addMessage('assistant', answer, citedIds);
         // The one owner decides: fly to the top note, light a cluster, or hold.
-        focusAnswer(ids, intent);
+        focusAnswer(actionAnswer ? [] : ids, intent);
         // Only the answer is spoken. The note itself stays on screen, unread.
         speak(spokenSummary(answer));
         if (intent.aboutNotes && ids.length === 0) {
@@ -2470,6 +2494,9 @@
     renderActiveSession();
     setChatClosed(readSessionFlag(CLOSED_KEY) === '1');
     setCollapsed(readSessionFlag(COLLAPSED_KEY) === '1');
+
+    // BOOT GREETING: one short line, never more, and never before a gesture.
+    speak('Hello, sir.');
 
     window.__kgModuleDone = true;
 

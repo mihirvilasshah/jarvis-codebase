@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +17,139 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import brain
+
+# =============================================================================
+# PERSONA - the entire character lives in this block.
+#
+# Rewrite the butler here: his manners, his wit, his honesty rules and the
+# control tags he may ask for. Nothing else in this file needs to change.
+# persona_prompt() is sent as the system prompt; apply_control_tags() below
+# executes whatever tag comes back, so he can never announce an action himself.
+#
+# To give him a new action later: add one entry to CONTROL_TAGS and write the
+# matching handler underneath this block. The prompt list is generated from
+# that dict, so there is exactly one place to edit.
+# =============================================================================
+
+PERSONA_RULES = """\
+You are the butler of Northwind Roasters' knowledge galaxy: dry, impeccably
+polite, quietly amused, and entirely unflappable - a good British butler who
+has seen every crisis and considers none of them an emergency.
+
+HOW YOU SPEAK
+- One line of dry wit, then the facts. The wit is a garnish, not the meal:
+  one genuinely funny line beats three bland ones. If nothing funny is
+  honestly available, a dry understatement will do - but a bare fact with no
+  trace of personality is a shrug, and shrugs are not answers.
+- Address the user as "sir" occasionally - now and then, not in every reply.
+  Overuse is the difference between charming and grating.
+- Two or three sentences is ample. Understatement over enthusiasm.
+- Never recite or quote a note back at the user. The note is already open on
+  their screen; give only what answers the question.
+
+HOUSE STYLE - tone, not content, so do not copy the facts
+Asked who runs barista training: "That would be Sam Okafor, sir - our Lead
+Barista and Trainer, and a man who has clearly made his peace with repetition."
+Asked something the notes cannot support: "I'm afraid the notes are silent on
+that, sir. I would rather admit ignorance than invent a source."
+
+HONESTY
+- Answer only from the NOTES provided. When they do not cover the question,
+  say so plainly and with a little dignity, then stop. Never invent a source,
+  never pad, and never present a merely related note as the answer.
+- Never claim an action has been taken. You cannot act by talking: the server
+  performs actions and returns a receipt. Offering is permitted; announcing a
+  completed action you did not perform is the one unforgivable sin.
+"""
+
+ACTION_RULES = """\
+ACTIONS
+Some requests are actions rather than questions. For those, reply with one
+tag in square brackets and nothing else - no prose around it. The server runs
+the tag and its receipt becomes your answer; you never describe the result
+yourself. Only these tags exist:
+{tags}
+If a request needs an action that is not on this list, say plainly that you
+cannot do it, and offer what you can.
+"""
+
+# The one place control tags are listed. Each name maps to a handler below.
+CONTROL_TAGS = {
+    "COUNT": {
+        "help": "use when asked how many notes are indexed; reports the exact count",
+        "run": "_tag_count",
+    },
+    "INDEX": {
+        "help": "use when asked to re-index or refresh the knowledge graph from disk",
+        "run": "_tag_index",
+    },
+}
+
+NO_NOTES_REPLY = (
+    "I'm afraid the notes are silent on that, sir. I won't invent a source to "
+    "fill the silence."
+)
+
+
+def persona_prompt() -> str:
+    """The persona, with the tag list generated from the single dict above."""
+    tags = "\n".join("  [%s] - %s" % (name, spec["help"]) for name, spec in CONTROL_TAGS.items())
+    return (PERSONA_RULES.strip() + "\n\n" + ACTION_RULES.strip()).replace("{tags}", tags)
+
+
+# --- control tags: the handlers named in CONTROL_TAGS -------------------------
+
+TAG_RE = re.compile(r"\[([A-Z][A-Z0-9_]*)(?::([^\]]{0,200}))?\]")
+
+
+def _tag_count(_arg: str) -> tuple[bool, str]:
+    notes = brain.note_count()
+    if notes <= 0:
+        return False, "There are no notes indexed, sir; the shelf is bare."
+    return True, "%d notes are indexed, sir." % notes
+
+
+def _tag_index(_arg: str) -> tuple[bool, str]:
+    notes = brain.reload_graph()
+    return True, "Re-indexed, sir: %d notes on file." % len(notes)
+
+
+def run_control_tag(name: str, arg: str | None) -> tuple[bool, str]:
+    spec = CONTROL_TAGS.get(name)
+    if not spec:
+        return False, "I can't do that, sir. Nothing has been changed."
+    handler = globals().get(spec.get("run", ""))
+    if not callable(handler):
+        return False, "That isn't wired up, sir. Nothing has been changed."
+    try:
+        ok, receipt = handler((arg or "").strip())
+        return bool(ok), str(receipt)
+    except Exception:
+        traceback.print_exc()
+        return False, "That attempt came to nothing, sir. Nothing has been changed."
+
+
+def apply_control_tags(result: dict) -> dict:
+    """Replace every [TAG] in an answer with the receipt from actually running it."""
+    answer = result.get("answer")
+    if not isinstance(answer, str) or "[" not in answer:
+        return result
+    receipts: list[dict] = []
+
+    def replace(match: re.Match) -> str:
+        name = match.group(1)
+        ok, receipt = run_control_tag(name, match.group(2))
+        receipts.append({"tag": name, "ok": ok, "receipt": receipt})
+        return receipt
+
+    rewritten = re.sub(r"\s+", " ", TAG_RE.sub(replace, answer)).strip()
+    if not receipts:
+        return result
+    updated = dict(result)
+    updated["answer"] = rewritten or receipts[0]["receipt"]
+    updated["receipts"] = receipts
+    return updated
+
 
 ROOT = Path(__file__).resolve().parent
 VIEWER = ROOT / "viewer"
@@ -132,8 +266,10 @@ class Handler(SimpleHTTPRequestHandler):
                 question,
                 session_id=payload.get("session_id"),
                 client_history=payload.get("history"),
+                persona=persona_prompt(),
+                empty_reply=NO_NOTES_REPLY,
             )
-            self._json(200, result)
+            self._json(200, apply_control_tags(result))
         except brain.BrainError as exc:
             self._json(exc.status, {"error": exc.message, "code": exc.code, "nodes": []})
         except Exception:
