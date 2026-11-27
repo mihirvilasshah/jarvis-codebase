@@ -83,6 +83,27 @@
       pointer-events: none;
     }
     .hud > * { pointer-events: auto; }
+    .hud-actions { display:flex; align-items:center; gap:8px; position:relative; }
+    .command-btn {
+      width:42px; height:42px; display:grid; place-items:center;
+      border:1px solid rgba(167,139,250,.32); border-radius:50%;
+      background:rgba(12,18,34,.82); color:var(--violet); cursor:pointer;
+      box-shadow:0 10px 30px rgba(0,0,0,.32), inset 0 1px rgba(255,255,255,.05);
+    }
+    .command-btn:hover { border-color:rgba(167,139,250,.7); background:rgba(22,20,48,.92); }
+    .command-btn[aria-pressed="true"] { color:#061018; background:linear-gradient(135deg,var(--violet),var(--cyan)); }
+    .command-menu {
+      position:absolute; right:0; top:50px; width:220px; display:none;
+      border:1px solid var(--line); border-radius:16px; padding:8px;
+      background:rgba(7,14,25,.94); backdrop-filter:blur(18px);
+      box-shadow:0 18px 50px rgba(0,0,0,.45);
+    }
+    .command-menu.open { display:block; }
+    .command-menu button {
+      width:100%; border:0; border-radius:10px; background:transparent;
+      color:#bcd6e9; text-align:left; padding:10px 11px; cursor:pointer;
+    }
+    .command-menu button:hover { background:rgba(167,139,250,.10); color:#fff; }
     .brand { display: flex; align-items: flex-start; gap: 14px; }
     .brand-mark {
       width: 38px;
@@ -930,7 +951,18 @@
         <p class="stats"><span id="stat-notes">—</span> notes · <span id="stat-links">—</span> connections · <span id="stat-groups">—</span> clusters</p>
       </div>
     </div>
-    <button id="reset-view" class="ghost-btn" type="button">Reset view</button>
+    <div class="hud-actions">
+      <button id="reset-view" class="ghost-btn" type="button">Reset view</button>
+      <button id="command-btn" class="command-btn" type="button" title="Live actions: web research or REA" aria-label="Live actions: web research or REA" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="m4.9 4.9 2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2"/>
+        </svg>
+      </button>
+      <div id="command-menu" class="command-menu" aria-label="Live action menu">
+        <button id="command-research" type="button">🔎 Web research</button>
+        <button id="command-rea" type="button">◉ Observe a website with REA</button>
+      </div>
+    </div>
   </header>
 
   <nav id="legend" class="legend" aria-label="Filter notes by group">
@@ -979,7 +1011,7 @@
       <span class="chat-label">Ask your notes</span>
       <div class="chat-tools">
         <button id="screen-btn" class="chat-tool chat-tool-text" type="button" title="Share your screen" aria-label="Share your screen" aria-pressed="false">Screen</button>
-        <button id="voice-btn" class="chat-tool" type="button" title="Ask by voice" aria-label="Ask by voice" aria-pressed="false">
+        <button id="voice-btn" class="chat-tool" type="button" title="Ask your notes by voice" aria-label="Ask your notes by voice" aria-pressed="false">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
         </button>
         <button id="chat-history" class="chat-tool chat-tool-text" type="button" title="View saved chats" aria-label="View saved chats">History</button>
@@ -2906,25 +2938,25 @@
       else if (voiceLine.dataset.state === 'thinking') setVoiceLine(wantListening ? 'listening' : 'idle');
     }
 
-    async function ask(question) {
+    async function ask(question, allowActions = true) {
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
 
-      if (/^(?:jarvis[\s,.!:]*)?(?:(?:please\s+)?(?:research|investigate|search(?:\s+the\s+)?web\s+for|find(?:\s+the)?\s+(?:latest\s+)?(?:information|news|developments)\s+(?:on|about)|what\s+is\s+happening\s+with|look\s+up)\b)/i.test(text)) {
+      if (allowActions && /^(?:jarvis[\s,.!:]*)?(?:(?:please\s+)?(?:research|investigate|search(?:\s+the\s+)?web\s+for|find(?:\s+the)?\s+(?:latest\s+)?(?:information|news|developments)\s+(?:on|about)|what\s+is\s+happening\s+with|look\s+up)\b)/i.test(text)) {
         await runLiveResearch(text);
         return;
       }
-      if (window.__jarvisResearchId && /^(?:jarvis[\s,.!:]*)?(?:explain|compare|summarize|summarise|give me|what about|find more|disadvantages?|advantages?|top [a-z0-9 ]+)/i.test(text)) {
+      if (allowActions && window.__jarvisResearchId && /^(?:jarvis[\s,.!:]*)?(?:explain|compare|summarize|summarise|give me|what about|find more|disadvantages?|advantages?|top [a-z0-9 ]+)/i.test(text)) {
         await runLiveResearch(text);
         return;
       }
-      if (/^(?:save\s+this(?:\s+research)?|read\s+the\s+sources\s+aloud)$/i.test(text) && window.__jarvisResearchId) {
+      if (allowActions && /^(?:save\s+this(?:\s+research)?|read\s+the\s+sources\s+aloud)$/i.test(text) && window.__jarvisResearchId) {
         if (/^save\b/i.test(text)) await saveLiveResearch();
         else if (window.__jarvisResearch) speak(window.__jarvisResearch.sources.map((s, i) => (i + 1) + '. ' + s.title + '. ' + s.url).join(' '));
         return;
       }
 
-      if (handleTeardownText(text)) return;
+      if (allowActions && handleTeardownText(text)) return;
 
       // "Remember that ..." is a capture, typed or spoken, not a question.
       const captured = text.match(REMEMBER_RE);
@@ -3277,6 +3309,8 @@
     let hasRealSpeech = false; // a real answer is queued or playing
     let recognition = null;    // the single SpeechRecognition instance
     let wantListening = false; // the mic is meant to be on right now
+    let activeVoiceMode = 'notes';
+    let activeActionIntent = 'research';
     let voiceBuffer = '';      // final speech collected for this thought
     let interimLive = '';      // speech the engine has not finalised yet
     let finishTimer = 0;       // the FINISH_MS countdown
@@ -3450,20 +3484,38 @@
       const thought = String(text || '').replace(/\s+/g, ' ').trim();
       if (!thought) return;
       stopListening();
-      // Voice routes get the sentence before the brain does.
-      const route = matchVoiceRoute(thought, false);
-      if (route) {
-        runVoiceRoute(route, thought);
+      if (activeVoiceMode === 'actions') {
+        const route = matchVoiceRoute(thought, false);
+        if (route) {
+          runVoiceRoute(route, thought);
+          return;
+        }
+        if (activeActionIntent === 'rea') {
+          ask('tear down ' + thought);
+          activeActionIntent = 'research';
+          return;
+        }
+        ask(/^(?:research|investigate|search(?:\s+the\s+)?web\s+for)\b/i.test(thought)
+          ? thought
+          : 'Research ' + thought);
+        return;
+      }
+      // The notes mic is intentionally limited to normal knowledge-chat routes.
+      // REA and live research belong to the separate HUD action mic.
+      const interrupt = VOICE_ROUTES.find((route) => route.name === 'interrupt');
+      if (interrupt && interrupt.pattern.test(thought)) {
+        runVoiceRoute(interrupt, thought);
         return;
       }
       if (busy) {
         toast('Still thinking — one moment.');
         return;
       }
-      ask(thought);
+      ask(thought, false);
     }
 
-    function startListening() {
+    function startListening(mode) {
+      activeVoiceMode = mode === 'actions' ? 'actions' : 'notes';
       if (!Recognition) {
         toast('This browser cannot listen. Chrome, Edge or Safari can.');
         return;
@@ -3514,9 +3566,10 @@
       if (voiceLine.dataset.state === 'listening') setVoiceLine('idle');
     }
 
-    function micToggle() {
+    function micToggle(mode) {
+      activeVoiceMode = mode === 'actions' ? 'actions' : 'notes';
       if (!wantListening) {
-        startListening();
+        startListening(activeVoiceMode);
         return;
       }
       // Pressing the mic again sends whatever has been heard, immediately.
@@ -3527,10 +3580,21 @@
     }
 
     function updateMic() {
-      const label = wantListening ? 'Stop listening' : 'Ask by voice';
-      voiceBtn.setAttribute('aria-pressed', String(wantListening));
-      voiceBtn.setAttribute('aria-label', label);
-      voiceBtn.title = label;
+      const label = wantListening
+        ? 'Stop listening'
+        : (activeVoiceMode === 'actions' ? 'Live actions by voice' : 'Ask your notes by voice');
+      voiceBtn.setAttribute('aria-pressed', String(wantListening && activeVoiceMode === 'notes'));
+      voiceBtn.setAttribute('aria-label',
+        wantListening && activeVoiceMode === 'notes' ? 'Stop listening to notes' : 'Ask your notes by voice');
+      voiceBtn.title =
+        wantListening && activeVoiceMode === 'notes' ? 'Stop listening to notes' : 'Ask your notes by voice';
+      const commandBtn = $('command-btn');
+      if (commandBtn) {
+        commandBtn.setAttribute('aria-pressed', String(wantListening && activeVoiceMode === 'actions'));
+        commandBtn.title = wantListening && activeVoiceMode === 'actions'
+          ? 'Stop live actions listening'
+          : 'Live actions: web research or REA';
+      }
     }
 
     function makeRecognition() {
@@ -3613,7 +3677,34 @@
       return instance;
     }
 
-    voiceBtn.addEventListener('click', micToggle);
+    voiceBtn.addEventListener('click', () => micToggle('notes'));
+
+    const commandBtn = $('command-btn');
+    const commandMenu = $('command-menu');
+    commandBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (wantListening) {
+        micToggle('actions');
+        return;
+      }
+      commandMenu.classList.toggle('open');
+      commandBtn.setAttribute('aria-expanded', String(commandMenu.classList.contains('open')));
+    });
+    $('command-research').addEventListener('click', () => {
+      commandMenu.classList.remove('open');
+      activeActionIntent = 'research';
+      micToggle('actions');
+    });
+    $('command-rea').addEventListener('click', () => {
+      commandMenu.classList.remove('open');
+      activeActionIntent = 'rea';
+      micToggle('actions');
+    });
+    document.addEventListener('click', (event) => {
+      if (!commandMenu.contains(event.target) && event.target !== commandBtn) {
+        commandMenu.classList.remove('open');
+      }
+    });
 
     $('research-close').addEventListener('click', () => {
       $('research-card').classList.remove('open');
