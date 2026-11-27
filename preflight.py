@@ -1043,7 +1043,7 @@ def check_teardown_observe(ctx: Context) -> Outcome:
     status, _, body = request(
         ctx.base_url + "/teardown",
         method="POST",
-        payload={"url": "https://example.com"},
+        payload={"url": "https://example.com", "headless": True},
         timeout=300,
     )
     if status != 200:
@@ -1054,17 +1054,32 @@ def check_teardown_observe(ctx: Context) -> Outcome:
     if data.get("ok") is not True:
         raise CheckFailure(f"live REA observation failed: {snippet(data.get('reply'))}")
     command = data.get("command")
-    if command != "capture-browser-scenario":
+    if command != "analyze-web-bundle":
         raise CheckFailure(f"REA used an unexpected command: {snippet(command)}")
     evidence = data.get("data")
     if not isinstance(evidence, dict) or not evidence.get("evidence_id"):
         raise CheckFailure("REA returned no evidence for the observed website")
+    if data.get("chrome_closed") is not True:
+        raise CheckFailure(f"Chrome was not closed: {data.get('remaining_processes')}")
+    if data.get("profile_cleaned") is not True:
+        raise CheckFailure("the teardown profile folder was not removed")
+    if data.get("remaining_processes"):
+        raise CheckFailure(f"processes still hold the profile: {data['remaining_processes']}")
+    if not str(data.get("title") or "").strip():
+        raise CheckFailure("the observed page had no title")
+    if not isinstance(data.get("load_seconds"), (int, float)) or data["load_seconds"] <= 0:
+        raise CheckFailure(f"invalid load time: {data.get('load_seconds')}")
+    scroll = data.get("scroll") if isinstance(data.get("scroll"), dict) else {}
+    if not isinstance(scroll.get("after"), (int, float)) or scroll["after"] <= scroll.get("before", 0):
+        raise CheckFailure(f"mouseWheel scrolling did not move the page: {scroll}")
     reply = str(data.get("reply") or "")
     if "read-only" not in reply.lower():
         raise CheckFailure(f"the teardown reply does not state it was read-only: {snippet(reply)}")
     return Outcome(
         "pass",
-        f"observed https://example.com · {command} · evidence {str(evidence['evidence_id'])[:12]}…",
+        f"headless {data['title']!r} · loaded {data['load_seconds']}s + "
+        f"{data.get('intro_wait_seconds')}s · scroll {scroll['before']}→{scroll['after']} · "
+        f"Chrome closed · profile removed · evidence {str(evidence['evidence_id'])[:12]}…",
     )
 
 
@@ -1111,7 +1126,7 @@ CHECKS = [
     ("config.json is not reachable from the browser", check_config_secret),
     ("A ?mute=1 tab is silent", check_mute),
     ("Teardown bay reports ready with pinned REA", check_teardown_diag),
-    ("Teardown observes a public website read-only", check_teardown_observe),
+    ("Teardown owns a fresh browser and observes read-only", check_teardown_observe),
     ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 

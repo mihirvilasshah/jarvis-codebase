@@ -187,15 +187,31 @@ npm install rea-agents@6.10.1 --save-exact --ignore-scripts
 
 `teardown.py` is standard-library only and soft-imported, so Jarvis boots even
 if it is absent. `GET /teardown/diag` reports readiness, installed and pinned
-versions, Node version, Chrome discovery, and plain-English problems. `POST
-/teardown` with `{"url": "https://..."}` (or the chat tag `[TEARDOWN:https://...]`)
-observes one website through `capture-browser-scenario` using a fixed `goto` +
-`wait` scenario. Missing pieces produce one in-character line saying what to install.
+versions, Node version, Chrome discovery, and plain-English problems.
 
-**The law:** REA observes only. The scenario never clicks, types, logs in, or
-changes anything, and the URL gate refuses non-http(s), local/private/loopback
-addresses, embedded credentials, and interactive commands. Only public websites
-you may look at are accepted.
+REA never opens a browser itself. Each `POST /teardown` with
+`{"url": "https://...", "headless": false}` (or the chat tag
+`[TEARDOWN:https://...]`) creates a brand-new profile under
+`~/.jarvis-tools/rea/profiles/JOB_ID`, launches **our own** Chrome with
+`--user-data-dir`, loopback `--remote-debugging-port=9333`, no first run, no
+default-browser check, extensions off, and a 1280×820 window. It polls the CDP
+endpoint for up to 25 s, finds the page target for the site's host (www and
+redirects allowed), waits for `document.readyState === "complete"` plus 2.5 s
+for the intro, then attaches REA with `analyze-web-bundle` on that endpoint and
+target id. A tiny standard-library WebSocket client reads page facts and sends
+`mouseWheel` input — never `scrollTo`, so smooth-scroll libraries behave. A
+`finally` block terminates Chrome, kills anything still holding that profile,
+and deletes the folder. `headless: true` runs the same browser with no window.
+
+Direct headless verification:
+```powershell
+python teardown.py --url https://example.com --headless
+```
+
+**The law:** REA observes only. No clicks, typing, logins, or changes; only
+public http(s) websites, no local/private/loopback addresses, no embedded
+credentials, and no interactive REA commands. Missing pieces produce one
+in-character line saying what to install.
 
 ## Preflight (live end-to-end check)
 

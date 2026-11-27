@@ -487,7 +487,9 @@ class Handler(SimpleHTTPRequestHandler):
                 )
                 return
             value = payload.get("url", payload.get("question", payload.get("text")))
-            result = teardown.run_teardown(value, payload.get("command"))
+            result = teardown.run_teardown(
+                value, payload.get("command"), headless=payload.get("headless") is True
+            )
             self._json(200, result)
             return
 
