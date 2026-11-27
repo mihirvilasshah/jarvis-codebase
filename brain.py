@@ -275,6 +275,20 @@ def note_count() -> int:
         return 0
 
 
+def add_note(node: dict) -> None:
+    """Put a freshly captured note into the live search index.
+
+    The graph file already contains it, so an unloaded cache is fine: the next
+    load_graph() reads it from disk.
+    """
+    with _graph_lock:
+        if _graph_cache is None:
+            return
+        if any(existing.get("id") == node.get("id") for existing in _graph_cache):
+            return
+        _graph_cache.append(dict(node))
+
+
 def reload_graph() -> list[dict]:
     """Forget the cached graph so the next load re-reads graph.json from disk."""
     global _graph_cache

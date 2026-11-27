@@ -3,9 +3,10 @@ Notes indexed: 30  FreeLLMAPI configured: True
 Press Ctrl+C to stop.
 [server] "GET /health HTTP/1.1" 200 -
 [server] "GET / HTTP/1.1" 200 -
+[server] "GET /graph-data.js HTTP/1.1" 200 -
+[server] "GET / HTTP/1.1" 200 -
 [server] "GET / HTTP/1.1" 200 -
 [server] "GET / HTTP/1.1" 200 -
 [server] "GET /graph-data.js HTTP/1.1" 200 -
-[server] "GET / HTTP/1.1" 200 -
+[server] "GET /?debug=1 HTTP/1.1" 200 -
 [server] "GET /graph-data.js HTTP/1.1" 200 -
-[server] "GET /health HTTP/1.1" 200 -

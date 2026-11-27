@@ -1009,6 +1009,7 @@
     let hoveredId = null;
     let cited = new Set();
     let focusedGroup = null;
+    let pulse = null; // a newly born node, briefly glowing
 
     function makeGlowTexture() {
       const canvas = document.createElement('canvas');
@@ -1182,7 +1183,17 @@
       for (const node of nodes) {
         if (!node.__obj) continue;
         let target = 1;
-        if (node.id === selectedId) target = 1.17 + Math.sin(time * 2.5) * 0.055;
+        if (pulse && node.id === pulse.id) {
+          // A new star announces itself, then settles into the galaxy.
+          const age = performance.now() - pulse.start;
+          if (age < 1800) {
+            const wave = Math.sin((age / 1800) * Math.PI);
+            target = 1.1 + wave * 1.0;
+            if (node.__glow) node.__glow.material.opacity = 0.6 + wave * 0.4;
+          } else {
+            pulse = null;
+          }
+        } else if (node.id === selectedId) target = 1.17 + Math.sin(time * 2.5) * 0.055;
         else if (cited.has(node.id)) target = 1.11 + Math.sin(time * 1.9 + node.id) * 0.04;
         else if (node.id === hoveredId) target = 1.1;
         const next = node.__obj.scale.x + (target - node.__obj.scale.x) * 0.12;
@@ -1454,6 +1465,51 @@
       publishFocus('reset', [], { reason: 'reset button' });
     }
 
+    /* =====================================================================
+       ONE DOOR FOR NEW NOTES (viewer side)
+       addNote() is the only function that adds a node to the running galaxy:
+       birth at its closest note, links, a glow pulse, then the flight. It uses
+       focusNote(), so the camera still has exactly one owner.
+       ===================================================================== */
+
+    function addNote(record) {
+      const anchorNode = nodes[record.anchor];
+      const base = anchorNode && Number.isFinite(anchorNode.x) ? anchorNode : { x: 0, y: 0, z: 0 };
+      const node = {
+        id: nodes[record.id] ? nodes.length : record.id,
+        label: record.label,
+        group: record.group,
+        excerpt: record.excerpt || '',
+        x: base.x + (Math.random() - 0.5) * 7,
+        y: base.y + (Math.random() - 0.5) * 7,
+        z: base.z + (Math.random() - 0.5) * 7
+      };
+      nodes.push(node);
+      adjacency.set(node.id, new Set());
+      degree.set(node.id, 0);
+
+      for (const other of Array.isArray(record.links) ? record.links : []) {
+        if (!Number.isInteger(other) || other === node.id || !nodes[other]) continue;
+        DATA.links.push({ source: Math.min(node.id, other), target: Math.max(node.id, other) });
+        adjacency.get(node.id).add(other);
+        adjacency.get(other).add(node.id);
+        degree.set(node.id, (degree.get(node.id) || 0) + 1);
+        degree.set(other, (degree.get(other) || 0) + 1);
+      }
+
+      graph.nodeVal((n) => 1 + Math.min(degree.get(n.id) || 0, 10) * 0.35);
+      graph.graphData(DATA);
+
+      $('stat-notes').textContent = String(nodes.length);
+      $('boot-notes').textContent = String(nodes.length);
+      $('stat-links').textContent = String(DATA.links.length);
+      $('stat-groups').textContent = String(new Set(nodes.map((n) => n.group)).size);
+
+      pulse = { id: node.id, start: performance.now() };
+      focusNote(node.id, { fly: true, reason: 'new capture' });
+      return node;
+    }
+
     $('panel-close').addEventListener('click', closePanel);
     $('reset-view').addEventListener('click', focusReset);
     $('panel-ask').addEventListener('click', () => {
@@ -1498,6 +1554,8 @@
     const isLocal4700 =
       (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '4700';
     const CHAT_ENDPOINT = window.KG_CHAT_ENDPOINT || (isLocal4700 ? '/chat' : '/api/chat');
+    const REMEMBER_ENDPOINT = window.KG_REMEMBER_ENDPOINT || '/remember';
+    const REMEMBER_RE = /^\s*remember\s+that\b[\s,:;\-–—]*(.*)$/i;
 
     /* =====================================================================
        NOTE INTENT
@@ -2050,6 +2108,13 @@
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
 
+      // "Remember that ..." is a capture, typed or spoken, not a question.
+      const captured = text.match(REMEMBER_RE);
+      if (captured) {
+        await captureNote(text, captured[1].trim());
+        return;
+      }
+
       // Decided before the request and long before the camera: is this about
       // the notes at all? Small talk and jokes must never move the galaxy.
       const intent = readNoteIntent(text);
@@ -2113,6 +2178,57 @@
         const message = error && error.message ? error.message : 'Something went wrong. Please try again.';
         addMessage('error', message);
         toast(message);
+      } finally {
+        setBusy(false);
+        chatInput.focus();
+      }
+    }
+
+    async function captureNote(text, body) {
+      let spoken = "I'm afraid that capture failed, sir. Nothing has been added to the galaxy.";
+      cancelSpeech();
+      setChatClosed(false);
+      if (chatEl.classList.contains('collapsed')) setCollapsed(false);
+      recordMessage('user', text);
+      addMessage('user', text);
+      setBusy(true);
+      const typing = addTyping();
+
+      try {
+        if (!body) throw new Error('There was nothing after "remember that".');
+        const response = await fetch(REMEMBER_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: body })
+        });
+        const raw = await response.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error('The server returned an unreadable response.');
+        }
+        if (!response.ok || !data || data.ok !== true) {
+          if (data && typeof data.reply === 'string' && data.reply.trim()) spoken = data.reply.trim();
+          throw new Error((data && data.error) || 'The note could not be saved.');
+        }
+
+        typing.remove();
+        addNote(data);
+        const reply =
+          typeof data.reply === 'string' && data.reply.trim()
+            ? data.reply.trim()
+            : 'Noted, sir. "' + data.label + '" is filed.';
+        recordMessage('assistant', reply, [data.id]);
+        addMessage('assistant', reply, [data.id]);
+        speak(reply);
+      } catch (error) {
+        typing.remove();
+        const detail = error && error.message ? error.message : 'The note could not be saved.';
+        addMessage('error', detail + ' Nothing has been added.');
+        toast('Capture failed — nothing was saved.');
+        // A capture must never fail in silence.
+        speak(spoken);
       } finally {
         setBusy(false);
         chatInput.focus();
