@@ -1,0 +1,5 @@
+{
+  "freellmapi_api_key": "freellmapi-your-unified-key",
+  "freellmapi_base_url": "http://localhost:3001/v1",
+  "freellmapi_model": "auto"
+}

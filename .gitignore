@@ -1,0 +1,21 @@
+# Local secrets and configuration
+config.json
+config.local.json
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Vercel
+.vercel/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+.vercel

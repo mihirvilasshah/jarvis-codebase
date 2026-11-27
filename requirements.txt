@@ -1,0 +1,2 @@
+# This project uses only the Python standard library.
+# FreeLLMAPI is called over its OpenAI-compatible HTTPS API with urllib.

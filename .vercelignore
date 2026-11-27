@@ -1,0 +1,10 @@
+config.json
+config.local.json
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.DS_Store
+Thumbs.db
