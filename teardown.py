@@ -752,6 +752,102 @@ def _decode_snapshot(data, destination: Path) -> bool:
     return False
 
 
+def evidence_ids(result: dict) -> list[str]:
+    ids: list[str] = []
+    for line in result.get("evidence", []):
+        if not isinstance(line, dict) or line.get("source") != "REA":
+            continue
+        data = line.get("data")
+        for _, value in _walk(data):
+            if isinstance(value, str) and value.startswith("ev_") and value not in ids:
+                ids.append(value)
+    return ids
+
+
+def build_digest(result: dict, question: str, host: str) -> str:
+    """Plain-text evidence bundle, under ~15,000 characters, with attribution."""
+    assets = result.get("asset_log") or {}
+    fingerprints = result.get("fingerprints") or []
+    stack = [f"{item['category']} {item['version']}".strip() for item in fingerprints if item.get("found")]
+    for banner in result.get("other_banners") or []:
+        stack.append("other: " + _snippet(banner, 120))
+
+    lines = [
+        "TEARDOWN DIGEST - every line is labelled with who captured it.",
+        f"[Jarvis] site: {result.get('url')}",
+        f"[Jarvis] question: {question}",
+        f"[Jarvis] host: {host}",
+        "[REA] page: " + _snippet(result.get("title"), 200),
+        "[Jarvis] final URL: " + _snippet(result.get("final_url"), 200),
+        "[Jarvis] loaded in: " + str(result.get("load_seconds")) + "s + " + str(result.get("intro_wait_seconds")) + "s intro wait",
+        "[Jarvis] browser: " + _snippet(result.get("browser_version"), 120),
+        "[Jarvis] CDP target: " + str(result.get("target_id")),
+        "[Jarvis] scroll: " + str(result.get("scroll")),
+        "",
+        "SCRIPTS (Jarvis read from performance entries):",
+    ]
+    scripts = sorted(
+        (item for item in (assets.get("files") or []) if item.get("kind") == "Scripts"),
+        key=lambda item: item.get("size", 0), reverse=True,
+    )
+    if scripts:
+        for item in scripts:
+            lines.append(f"[Jarvis] script: {item['name']} | {item['origin']} | {item['size']:,} bytes")
+    else:
+        lines.append("[Jarvis] script: none logged")
+    lines.append("")
+    lines.append("WHICH FILE LOADS WHICH (REA analyze-web-bundle):")
+    loads = result.get("load_graph") or []
+    lines.extend(f"[REA] load: {item}" for item in loads[:40] or ["[REA] load: none reported"])
+    lines.append("")
+    lines.append("ROUTES (REA analyze-web-bundle):")
+    routes = result.get("routes") or []
+    lines.extend(f"[REA] route: {item}" for item in routes[:40] or ["[REA] route: 0 declared"])
+    lines.append("")
+    lines.append("CODE SIGNALS handed to the graphics card (REA):")
+    signals = result.get("code_signals") or []
+    if signals:
+        lines.extend(f"[REA] signal: {item['signal']} x{item['count']}" for item in signals)
+    else:
+        lines.append("[REA] signal: none")
+    lines.append("")
+    lines.append("STACK / LICENCE BANNERS (Jarvis reading REA's captured code, designer priority):")
+    for item in fingerprints:
+        lines.append(
+            f"[Jarvis] stack: {item['category']} | found={item['found']} | "
+            f"version={item.get('version') or '-'} | evidence={_snippet(item.get('match') or '-', 160)}"
+        )
+    lines.append("")
+    lines.append("ASSET TOTALS AND LARGEST FILES (Jarvis):")
+    lines.append(
+        f"[Jarvis] total: {assets.get('total_files', 0)} files, {assets.get('total_bytes', 0):,} bytes"
+    )
+    for kind, group in sorted((assets.get("groups") or {}).items()):
+        lines.append(f"[Jarvis] group: {kind} | {group['files']} files | {group['bytes']:,} bytes")
+    for item in (assets.get("top12") or []):
+        lines.append(
+            f"[Jarvis] largest: {item['name']} | {item['kind']} | {item['origin']} | {item['size']:,} bytes"
+        )
+    lines.append("")
+    lines.append("ORIGINS (Jarvis):")
+    lines.extend(f"[Jarvis] origin: {item}" for item in (assets.get("origins") or []) or ["[Jarvis] origin: none"])
+    lines.append("")
+    lines.append("SNAPSHOT (REA capture, Jarvis decode):")
+    lines.append("[REA] screenshot: " + str(result.get("screenshot_path") or "not saved"))
+    lines.append("")
+    lines.append("REA EVIDENCE IDS:")
+    lines.extend(f"[REA] evidence_id: {item}" for item in evidence_ids(result) or ["[REA] evidence_id: none"])
+    lines.append("")
+    lines.append("LIMITS:")
+    lines.append("[Jarvis] REA attaches to a page that is already running in our own browser; it does not launch or drive the site.")
+    lines.append("[Jarvis] Library names come from licence banners and strings in captured code, not from a package manifest; absent banners do not prove absence.")
+    lines.append("[Jarvis] REA reports only its own origin from the moment it attached; the asset log is the browser's whole resource timeline.")
+    lines.append("[Jarvis] Routes are static candidates in the captured code; reachability is unverified.")
+    lines.append("[Jarvis] Scroll effects and lazy loads are whatever fired during the 16 wheel events in the observation window.")
+    digest = "\n".join(lines)
+    return digest[:15000]
+
+
 # ---------------------------------------------------------------------------
 # the teardown
 # ---------------------------------------------------------------------------

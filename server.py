@@ -11,6 +11,7 @@ import datetime
 import json
 import os
 import re
+import shutil
 import sys
 import threading
 import traceback
@@ -142,11 +143,13 @@ def _tag_teardown(arg: str) -> tuple[bool, str]:
             "I'm afraid the teardown bay isn't fitted, sir. Install teardown.py and "
             "REA 6.10.1; nothing was touched.",
         )
-    result = teardown.run_teardown(arg)
+    parts = [part.strip() for part in arg.split("|", 1)]
+    url = parts[0] if parts else ""
+    question = parts[1] if len(parts) > 1 and parts[1] else ""
+    result = compose_teardown(url, question=question)
     if not result.get("ok"):
-        return False, str(result.get("reply") or "The teardown bay is not ready, sir. Nothing was touched.")
-    digest = str(result.get("digest_line") or result.get("reply") or "Observation complete, sir.")
-    return True, digest
+        return False, str(result.get("reply") or "The teardown could not be completed, sir.")
+    return True, str(result.get("label") or "Teardown complete, sir.")
 
 
 def run_control_tag(name: str, arg: str | None) -> tuple[bool, str]:
@@ -198,6 +201,7 @@ def apply_control_tags(result: dict) -> dict:
 
 REMEMBER_RE = re.compile(r"^\s*remember\s+that\b[\s,:;\-–—]*(.*)$", re.I | re.S)
 CAPTURE_LOCK = threading.Lock()
+TEARDOWN_LOCK = threading.Lock()
 
 
 def _slugify(value: str, limit: int = 60) -> str:
@@ -285,26 +289,38 @@ def _write_graph_files(graph: dict) -> None:
     os.replace(json_tmp, build.JSON_PATH)
 
 
-def remember(raw_text) -> dict:
+def remember(
+    raw_text,
+    *,
+    subfolder: str = "captures",
+    title: str | None = None,
+    body: str | None = None,
+    filename: str | None = None,
+    reply: str | None = None,
+) -> dict:
     """One door for new notes: file, node, links, graph files, live index."""
-    if not isinstance(raw_text, str):
+    if not isinstance(raw_text, str) and body is None:
         raise ValueError("There was nothing to remember, sir.")
-    match = REMEMBER_RE.match(raw_text)
-    body = re.sub(r"\s+", " ", match.group(1) if match else raw_text).strip()
-    if len(body) < 3:
+    if body is None:
+        match = REMEMBER_RE.match(raw_text)
+        body = re.sub(r"\s+", " ", match.group(1) if match else raw_text).strip()
+    if not isinstance(body, str) or len(body.strip()) < 3:
         raise ValueError('I need something after "remember that", sir.')
 
     with CAPTURE_LOCK:
-        folder = build.NOTES_DIR / "captures"
+        folder = build.NOTES_DIR / subfolder
         folder.mkdir(parents=True, exist_ok=True)
-        title = _capture_title(body)
-        path = _capture_path(folder, title)
+        note_title = title or _capture_title(body)
+        path = (folder / filename) if filename else _capture_path(folder, note_title)
         today = datetime.date.today().isoformat()
-        content = "---\ncaptured: " + today + "\n---\n\n# " + title + "\n\n" + body + "\n"
+        if filename and body.lstrip().startswith(("---", "#")):
+            content = body
+        else:
+            content = "---\ncaptured: " + today + "\n---\n\n# " + note_title + "\n\n" + body + "\n"
 
         path.write_text(content, encoding="utf-8")
         try:
-            label = build.label_from_path(path)
+            label = note_title if title else build.label_from_path(path)
             group = build.group_from_path(path)
             excerpt = build.make_excerpt(build.plain_text(content))
 
@@ -340,7 +356,7 @@ def remember(raw_text) -> dict:
         "links": links,
         "anchor": anchor,
         "file": path.relative_to(ROOT).as_posix(),
-        "reply": CAPTURE_REPLY.format(label=label),
+        "reply": reply or CAPTURE_REPLY.format(label=label),
     }
 
 
@@ -350,6 +366,206 @@ HOST = "127.0.0.1"
 # PORT=0 means "any free port" to the OS; this server always wants 4700.
 PORT = int(os.environ.get("KG_PORT") or os.environ.get("PORT") or "4700") or 4700
 MAX_BODY_BYTES = 64 * 1024
+
+
+TEARDOWN_SYSTEM = """You are Jarvis, the butler of a knowledge galaxy, writing a teardown of a website.
+Rules you must not break:
+- Every claim must trace to the labelled evidence. If something is an inference, say "likely".
+- Never invent a library, file, technique, route or version.
+- Keep attribution straight: REA captured some lines, Jarvis read others from its own browser. Say which when it matters.
+- Do not include web addresses or file names in SPOKEN.
+Output EXACTLY this structure and nothing else:
+LABEL: Teardown · HOST
+SPOKEN: two or three sentences; headline answer first, then the most surprising detail.
+SUMMARY: one short paragraph.
+---NOTE---
+A markdown note containing, in order: a one-line verdict, "The answer", "The stack" with each item's evidence, "How the effect works" as numbered steps, "What it loads", "Rebuild it" with 5 to 7 steps for Claude Code, and "What the evidence can't show".
+Think and answer inside one 7000-token budget."""
+
+
+def _teardown_host(url: str) -> str:
+    host = urlparse(str(url or "")).hostname or ""
+    if host.lower().startswith("www."):
+        host = host[4:]
+    return re.sub(r"[^A-Za-z0-9.-]", "", host) or "site"
+
+
+def _teardown_brain(digest: str, question: str, host: str) -> str:
+    config = brain.get_config(require_key=True)
+    user = (
+        "Host: " + host + "\nQuestion: " + question + "\n\n"
+        "EVIDENCE (each line labelled REA or Jarvis):\n" + digest
+    )
+    data = brain._post_chat(
+        config,
+        {
+            "model": config["model"],
+            "messages": [
+                {"role": "system", "content": TEARDOWN_SYSTEM},
+                {"role": "user", "content": user},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 7000,
+            "stream": False,
+        },
+    )
+    text = brain._extract_text(data)
+    if not text:
+        raise brain.BrainError(502, "empty_response", "The teardown writer returned nothing, sir.")
+    return text
+
+
+def _parse_teardown(text: str) -> dict:
+    label = ""
+    spoken = ""
+    summary = ""
+    note = ""
+    match = re.search(r"^\s*LABEL:\s*(.+?)\s*$", text, re.M)
+    if match:
+        label = match.group(1).strip()
+    match = re.search(r"^\s*SPOKEN:\s*(.*?)(?=^\s*SUMMARY:\s*|\Z)", text, re.M | re.S)
+    if match:
+        spoken = re.sub(r"\s+", " ", match.group(1)).strip()
+    match = re.search(r"^\s*SUMMARY:\s*(.*?)(?=^\s*---NOTE---\s*$|\Z)", text, re.M | re.S)
+    if match:
+        summary = re.sub(r"\s+", " ", match.group(1)).strip()
+    if "---NOTE---" in text:
+        note = text.split("---NOTE---", 1)[1].strip()
+    return {"label": label, "spoken": spoken, "summary": summary, "note": note}
+
+
+def _ensure_concept_notes() -> list[dict]:
+    """Birth Jarvis and [[REA]] through the one note door, REA before teardown."""
+    records: list[dict] = []
+    today = datetime.date.today().isoformat()
+    known = {str(node.get("label", "")) for node in brain.load_graph()}
+
+    jarvis_path = build.NOTES_DIR / "captures" / "Jarvis.md"
+    if not jarvis_path.exists() and "Jarvis" not in known:
+        body = (
+            "---\ncaptured: " + today + "\n---\n\n# Jarvis\n\n"
+            "Jarvis is the butler of the knowledge galaxy: dry, impeccably polite, "
+            "and honest about the evidence. His reverse-engineering kit is [[REA]].\n"
+        )
+        records.append(
+            remember(
+                body,
+                title="Jarvis",
+                filename="Jarvis.md",
+                body=body,
+                reply="Jarvis has a place in the galaxy, sir.",
+            )
+        )
+    rea_path = build.NOTES_DIR / "captures" / "REA.md"
+    if not rea_path.exists() and "REA" not in known:
+        body = (
+            "---\ncaptured: " + today + "\n---\n\n# REA\n\n"
+            "REA (Reverse Engineer Anything) is the read-only observation kit used by "
+            "[[Jarvis]] on websites. It attaches to a browser Jarvis owns; it never "
+            "clicks, types, logs in, or changes anything.\n"
+        )
+        records.append(
+            remember(
+                body,
+                title="REA",
+                filename="REA.md",
+                body=body,
+                reply="REA has a place in the galaxy, sir.",
+            )
+        )
+    return records
+
+
+def _write_teardown_note(host: str, parsed: dict, result: dict) -> tuple[dict, str]:
+    today = datetime.date.today().isoformat()
+    stem = host + "-" + today
+    folder = build.NOTES_DIR / "captures" / "teardowns"
+    assets = folder / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    snapshot = assets / (stem + ".png")
+    source = str(result.get("screenshot_path") or "")
+    if source and Path(source).exists():
+        shutil.copyfile(source, snapshot)
+
+    assets_data = result.get("asset_log") or {}
+    ids = teardown.evidence_ids(result) if teardown is not None else []
+    stack_lines = []
+    for item in result.get("fingerprints") or []:
+        if item.get("found"):
+            stack_lines.append(f"- {item['category']}: {item.get('version') or 'present'} (Jarvis reading REA's code)")
+    evidence = [
+        "## Evidence",
+        "",
+        f"- Snapshot: ![{stem}](assets/{stem}.png)  (REA captured, Jarvis decoded)",
+        "- Stack (Jarvis reading REA's captured code):",
+        *(stack_lines or ["- none identified"]),
+        f"- Assets: {assets_data.get('total_files', 0)} files, {assets_data.get('total_bytes', 0):,} bytes (Jarvis browser read)",
+        "- Origins: " + ", ".join(str(item) for item in (assets_data.get("origins") or [])) + " (Jarvis browser read)",
+        "- REA evidence ids: " + (", ".join(ids) if ids else "none reported"),
+        "- Attribution: REA lines were captured by REA; Jarvis lines were read from the owned browser or REA's code.",
+        "- Limits: REA attaches to an already-running page; library names come from banners and strings, not a package manifest.",
+        "",
+        f"[[REA]] · [[Jarvis]]",
+    ]
+    note = (parsed.get("note") or parsed.get("summary") or "Teardown complete.").rstrip()
+    note = note + "\n\n" + "\n".join(evidence) + "\n"
+    record = remember(
+        note,
+        subfolder="captures/teardowns",
+        title="Teardown · " + host,
+        body=note,
+        filename=stem + ".md",
+        reply='Filed the teardown of ' + host + ', sir.',
+    )
+    return record, str(snapshot)
+
+
+def compose_teardown(url, question=None, headless: bool = False) -> dict:
+    """One-at-a-time evidence, one brain call, one filed note, one flight."""
+    if teardown is None:
+        return {"ok": False, "reply": "I'm afraid the teardown bay isn't fitted, sir. Install teardown.py and REA 6.10.1."}
+    if not TEARDOWN_LOCK.acquire(blocking=False):
+        return {"ok": False, "reply": "I'm already taking one apart, sir."}
+    try:
+        asked = str(question or "").strip() or "What is this site and how does it work?"
+        capture = teardown.run_teardown(url, headless=headless)
+        if not capture.get("ok"):
+            return {"ok": False, "reply": str(capture.get("reply") or "The teardown failed, sir.")}
+        host = _teardown_host(url)
+        digest = teardown.build_digest(capture, asked, host)
+        written = _teardown_brain(digest, asked, host)
+        parsed = _parse_teardown(written)
+        if not parsed["label"].lower().startswith("teardown"):
+            parsed["label"] = "Teardown · " + host
+        if not parsed["spoken"]:
+            parsed["spoken"] = "A tidy little teardown, sir; the evidence is filed."
+        if not parsed["summary"]:
+            parsed["summary"] = "The teardown has been filed with its evidence."
+        concept_notes = _ensure_concept_notes()
+        record, snapshot = _write_teardown_note(host, parsed, capture)
+        return {
+            "ok": True,
+            "reply": parsed["summary"],
+            "spoken": parsed["spoken"],
+            "label": parsed["label"],
+            "summary": parsed["summary"],
+            "note": parsed["note"],
+            "note_file": record["file"],
+            "snapshot": snapshot,
+            "notes": concept_notes + [record],
+            "evidence": capture.get("evidence", []),
+            "digest": digest,
+            "digest_chars": len(digest),
+            "host": host,
+        }
+    except brain.BrainError as exc:
+        return {"ok": False, "reply": exc.message}
+    except Exception as exc:
+        traceback.print_exc()
+        detail = str(exc).replace("\r", " ").replace("\n", " ")[:180]
+        return {"ok": False, "reply": f"The teardown could not be written, sir: {detail}"}
+    finally:
+        TEARDOWN_LOCK.release()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -388,7 +604,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -441,7 +657,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -476,6 +692,16 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/teardown/compose":
+            value = payload.get("url") or payload.get("site") or payload.get("question")
+            result = compose_teardown(
+                value,
+                question=payload.get("ask") or payload.get("detail") or "",
+                headless=payload.get("headless") is True,
+            )
+            self._json(200, result)
             return
 
         if path == "/teardown":

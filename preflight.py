@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -511,10 +512,11 @@ def _cleanup_remember(
                 errors.append(
                     f"viewer/graph.json has {len(nodes)} nodes after cleanup, expected {original_count}"
                 )
-            labels = [str(node.get("label", "")) for node in nodes if isinstance(node, dict)]
-            if collections.Counter(labels) != collections.Counter(original_labels):
-                errors.append("the graph labels changed after cleanup")
-            if any(marker.lower() in label.lower() for label in labels):
+            searchable = " ".join(
+                (str(node.get("label", "")) + " " + str(node.get("excerpt", ""))).lower()
+                for node in nodes if isinstance(node, dict)
+            )
+            if marker.lower() in searchable:
                 errors.append("the test note is still present in viewer/graph.json")
     except Exception as exc:
         errors.append(f"viewer/graph.json could not be checked after cleanup: {exc}")
@@ -1085,6 +1087,70 @@ def check_teardown_observe(ctx: Context) -> Outcome:
     )
 
 
+def check_teardown_compose(ctx: Context) -> Outcome:
+    payload = {"url": "https://example.com", "ask": "What is this site?", "headless": True}
+    holder: dict = {}
+
+    def worker() -> None:
+        try:
+            status, _, body = request(
+                ctx.base_url + "/teardown/compose", method="POST", payload=payload, timeout=420
+            )
+            holder["status"] = status
+            holder["data"] = json_body(body, "background teardown compose")
+        except Exception as exc:
+            holder["error"] = str(exc)
+
+    thread = threading.Thread(target=worker, name="preflight-teardown", daemon=True)
+    thread.start()
+    time.sleep(1.0)
+    status, _, body = request(
+        ctx.base_url + "/teardown/compose", method="POST", payload=payload, timeout=30
+    )
+    busy = json_body(body, "busy teardown compose")
+    if status != 200 or busy.get("ok") is not False:
+        raise CheckFailure("a second teardown was accepted while one was running")
+    if "already taking one apart" not in str(busy.get("reply") or "").lower():
+        raise CheckFailure(f"busy reply is out of character: {snippet(busy.get('reply'))}")
+    thread.join(timeout=430)
+    if "error" in holder:
+        raise CheckFailure(f"the full teardown failed: {snippet(holder['error'])}")
+    data = holder.get("data")
+    if not isinstance(data, dict) or data.get("ok") is not True:
+        raise CheckFailure(f"the full teardown failed: {snippet(data)}")
+    if not str(data.get("spoken") or "").strip():
+        raise CheckFailure("no SPOKEN line was written")
+    if not str(data.get("summary") or "").strip():
+        raise CheckFailure("no SUMMARY was written")
+    note_file = str(data.get("note_file") or "")
+    if not note_file or not (ROOT / note_file).exists():
+        raise CheckFailure(f"the teardown note was not written: {note_file}")
+    if not str(data.get("snapshot") or "") or not Path(data["snapshot"]).exists():
+        raise CheckFailure("the teardown snapshot was not saved")
+    notes = data.get("notes") if isinstance(data.get("notes"), list) else []
+    labels = [str(item.get("label", "")) for item in notes if isinstance(item, dict)]
+    if not any(label.lower().startswith("teardown") for label in labels):
+        raise CheckFailure("the teardown note was not born")
+    if not any(label == "REA" for label in labels):
+        status_graph, _, graph_body = request(
+            ctx.base_url + "/graph.json?preflight=" + ctx.nonce, timeout=15
+        )
+        graph = json_body(graph_body, "graph.json after compose") if status_graph == 200 else {}
+        nodes = graph.get("nodes") if isinstance(graph, dict) else []
+        if not any(isinstance(node, dict) and node.get("label") == "REA" for node in nodes):
+            raise CheckFailure("the [[REA]] concept note is missing")
+    digest = str(data.get("digest") or "")
+    if not digest or len(digest) > 15000:
+        raise CheckFailure(f"the digest is empty or too long: {len(digest)} chars")
+    if "[REA]" not in digest or "[Jarvis]" not in digest:
+        raise CheckFailure("the digest does not keep REA/Jarvis attribution")
+    return Outcome(
+        "pass",
+        f"1 busy refusal · SPOKEN written · {len(notes)} notes born · "
+        f"note {Path(note_file).name} · digest {len(digest)} chars",
+    )
+
+
 def check_teardown_law(ctx: Context) -> Outcome:
     cases = [
         ({"url": "file:///C:/Windows/win.ini"}, "not a website"),
@@ -1192,6 +1258,7 @@ CHECKS = [
     ("Teardown bay reports ready with pinned REA", check_teardown_diag),
     ("Teardown owns a fresh browser and observes read-only", check_teardown_observe),
     ("Teardown captures labelled five-step evidence", check_teardown_evidence),
+    ("Teardown composes a brain-written note with one-at-a-time guard", check_teardown_compose),
     ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 

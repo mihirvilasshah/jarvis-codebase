@@ -222,6 +222,16 @@ Direct headless verification:
 python teardown.py --url https://threejs.org/examples/webgl_loader_gltf.html --headless
 ```
 
+The full reading experience is `POST /teardown/compose` (or the chat tag
+`[TEARDOWN:https://...]`). It compresses the evidence into a labelled digest
+under 15,000 characters, makes one call to the current brain with a strict
+attribution prompt (7,000-token budget), and expects exactly `LABEL:`,
+`SPOKEN:`, `SUMMARY:` and `---NOTE---`. It writes the note to
+`notes/captures/teardowns/HOST-DATE.md` with the decoded PNG in an `assets`
+folder, births `[[REA]]` before the teardown note through the same note door,
+flies the camera to the teardown, and speaks the SPOKEN line. A second request
+while one is running gets “I'm already taking one apart, sir.”
+
 **The law:** REA observes only. No clicks, typing, logins, or changes; only
 public http(s) websites, no local/private/loopback addresses, no embedded
 credentials, and no interactive REA commands. Missing pieces produce one

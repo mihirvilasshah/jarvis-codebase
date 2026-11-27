@@ -2168,10 +2168,21 @@
         typing.remove();
         recordMessage('assistant', answer, citedIds);
         addMessage('assistant', answer, citedIds);
+        // A teardown can birth concept notes. addNote() owns the flight, so
+        // birth them in order and let the last one fly to the teardown.
+        if (Array.isArray(data.notes)) {
+          for (const record of data.notes) {
+            if (record && Number.isInteger(record.id)) addNote(record);
+          }
+        }
         // The one owner decides: fly to the top note, light a cluster, or hold.
         focusAnswer(actionAnswer ? [] : ids, intent);
-        // Only the answer is spoken. The note itself stays on screen, unread.
-        speak(spokenSummary(answer));
+        // Speak the written SPOKEN line when the server supplied one.
+        const spokenLine =
+          typeof data.spoken === 'string' && data.spoken.trim()
+            ? data.spoken.trim()
+            : spokenSummary(answer);
+        speak(spokenLine);
         if (intent.aboutNotes && ids.length === 0) {
           toast('No notes matched that question. Try a different topic.');
         }
