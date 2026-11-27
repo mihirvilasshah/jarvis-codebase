@@ -1581,11 +1581,11 @@
 
       // Peel a greeting so "Good morning - what are our hours?" still counts.
       const body = question.replace(GREETING_PREFIX, '').replace(/^[\s,.!:;—-]+/, '').trim();
-      if (!body) return { aboutNotes: false, reason: 'greeting', question: question };
+      if (!body) return { aboutNotes: false, social: true, reason: 'greeting', question: question };
 
       // Jokes and chat never move the camera, even when they mention coffee.
       for (const pattern of SMALL_TALK_PATTERNS) {
-        if (pattern.test(body)) return { aboutNotes: false, reason: 'small talk', question: question };
+        if (pattern.test(body)) return { aboutNotes: false, social: true, reason: 'small talk', question: question };
       }
 
       // "What do my notes say about ..." is a note question by definition.
@@ -2068,7 +2068,13 @@
         const response = await fetch(CHAT_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: text, session_id: activeId, history: priorHistory })
+          body: JSON.stringify({
+            question: text,
+            session_id: activeId,
+            history: priorHistory,
+            // Greetings and jokes are answered in character, without notes.
+            social: intent.social === true
+          })
         });
         const raw = await response.text();
         let data;

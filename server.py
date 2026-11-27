@@ -47,11 +47,13 @@ HOW YOU SPEAK
 - Never recite or quote a note back at the user. The note is already open on
   their screen; give only what answers the question.
 
-HOUSE STYLE - tone, not content, so do not copy the facts
-Asked who runs barista training: "That would be Sam Okafor, sir - our Lead
-Barista and Trainer, and a man who has clearly made his peace with repetition."
+HOUSE STYLE - tone only, never wording to reuse
+Asked who is responsible for the impossible: "That would be whoever has the
+least sense and the most authority, sir."
 Asked something the notes cannot support: "I'm afraid the notes are silent on
 that, sir. I would rather admit ignorance than invent a source."
+Every real answer is written fresh from the notes: dry line first, then the
+fact, in your own words.
 
 HONESTY
 - Answer only from the NOTES provided. When they do not cover the question,
@@ -60,6 +62,9 @@ HONESTY
 - Never claim an action has been taken. You cannot act by talking: the server
   performs actions and returns a receipt. Offering is permitted; announcing a
   completed action you did not perform is the one unforgivable sin.
+- You know nothing of the user's private life, whereabouts or mood beyond
+  what they actually say. Never invent such details to set up a joke; a
+  butler who imagines your hotel is a butler who has lost the plot.
 """
 
 ACTION_RULES = """\
@@ -154,7 +159,8 @@ def apply_control_tags(result: dict) -> dict:
 ROOT = Path(__file__).resolve().parent
 VIEWER = ROOT / "viewer"
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("KG_PORT") or os.environ.get("PORT") or "4700")
+# PORT=0 means "any free port" to the OS; this server always wants 4700.
+PORT = int(os.environ.get("KG_PORT") or os.environ.get("PORT") or "4700") or 4700
 MAX_BODY_BYTES = 64 * 1024
 
 
@@ -268,6 +274,7 @@ class Handler(SimpleHTTPRequestHandler):
                 client_history=payload.get("history"),
                 persona=persona_prompt(),
                 empty_reply=NO_NOTES_REPLY,
+                social=payload.get("social") is True,
             )
             self._json(200, apply_control_tags(result))
         except brain.BrainError as exc:

@@ -421,6 +421,25 @@ def _note_block(notes: list[dict]) -> str:
     )
 
 
+def build_social_messages(question: str, history: list[dict], persona: str | None = None) -> list[dict]:
+    """A prompt for greetings and jokes: in character, and with nothing to invent."""
+    instructions = persona.strip() if isinstance(persona, str) and persona.strip() else SYSTEM_PROMPT
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"{instructions}\n\nNOTES: none are relevant to this message. It is a social "
+                "pleasantry, not a research question. Reply in character in one or two short "
+                "sentences. Do not invent business facts, figures, sources or actions. If they "
+                "ask for something you cannot do, say so plainly."
+            ),
+        }
+    ]
+    messages.extend(history)
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
 def build_messages(
     question: str, notes: list[dict], history: list[dict], persona: str | None = None
 ) -> list[dict]:
@@ -599,6 +618,7 @@ def answer_question(
     client_history=None,
     persona=None,
     empty_reply=None,
+    social=False,
 ) -> dict:
     if not isinstance(question, str):
         raise BrainError(400, "invalid_request", "Please send a question as text.")
@@ -618,14 +638,18 @@ def answer_question(
     notes = retrieve(question, _retrieval_query(history), nodes)
 
     if not notes:
-        answer = (
-            empty_reply.strip()
-            if isinstance(empty_reply, str) and empty_reply.strip()
-            else (
-                "I couldn't find any notes relevant to that question. "
-                "Try asking about a topic covered in your knowledge galaxy."
+        if social:
+            # Small talk needs manners, not sources; answer it in character.
+            answer = _clean_answer(_call_llm(get_config(require_key=True), build_social_messages(question, history, persona)))
+        else:
+            answer = (
+                empty_reply.strip()
+                if isinstance(empty_reply, str) and empty_reply.strip()
+                else (
+                    "I couldn't find any notes relevant to that question. "
+                    "Try asking about a topic covered in your knowledge galaxy."
+                )
             )
-        )
         if _STORE is not None:
             _STORE.append(session, question, answer)
         return {"answer": answer, "nodes": []}
