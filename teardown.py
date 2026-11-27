@@ -47,6 +47,7 @@ CDP_PORT = 9333
 WINDOW_SIZE = "1280,820"
 INTRO_WAIT_SECONDS = 2.5
 CDP_WAIT_SECONDS = 25.0
+CDP_CALL_TIMEOUT = 90.0
 WHEEL_STEPS = 16
 WHEEL_STEP_SECONDS = 0.12
 
@@ -857,7 +858,11 @@ def build_digest(result: dict, question: str, host: str) -> str:
 
 def run_teardown(url, command=None, headless: bool = False, progress=None) -> dict:
     """Capture five labelled evidence streams attached to our own fresh Chrome."""
+    current_label = ""
+
     def step(number: int, label: str) -> None:
+        nonlocal current_label
+        current_label = label
         if progress:
             progress(number, label)
     diag = diagnose()
@@ -949,7 +954,7 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
         )
         if not cdp_target:
             raise RuntimeError("No Chrome page target for that website was found")
-        client = CDPClient(str(cdp_target["webSocketDebuggerUrl"]), timeout=CDP_WAIT_SECONDS).connect()
+        client = CDPClient(str(cdp_target["webSocketDebuggerUrl"]), timeout=CDP_CALL_TIMEOUT).connect()
 
         ready_at = None
         while time.monotonic() < deadline:
@@ -966,7 +971,7 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
         href = str(client.evaluate("location.href") or "")
 
         # Target id must come from REA's own target listing.
-        listing = _run_rea(node, ["list-browser-targets", endpoint], timeout=60)
+        listing = _run_rea(node, ["list-browser-targets", endpoint], timeout=120)
         rea_ids = _rea_targets(listing, url)
         target_id = rea_ids[0] if rea_ids else str(cdp_target["id"])
         evidence("REA", "target", "list-browser-targets", {"target_ids": rea_ids, "used": target_id},
@@ -983,7 +988,7 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
                         "inspect-web-page", endpoint, target_id,
                         "--observation-ms", "7000", "--include-script-sources",
                     ],
-                    timeout=120,
+                    timeout=300,
                 )
             except Exception as exc:
                 watch_holder["error"] = str(exc)
@@ -1009,7 +1014,7 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
 
         # 2. READ THE CODE
         step(4, "REA is reading the code")
-        bundle = _run_rea(node, ["analyze-web-bundle", endpoint, target_id], timeout=240)
+        bundle = _run_rea(node, ["analyze-web-bundle", endpoint, target_id], timeout=600)
         strings = _strings(watch_data) + _strings(bundle)
         routes = _extract_routes(bundle)
         load_graph = _extract_load_graph(bundle)
@@ -1027,7 +1032,7 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
             time.sleep(0.05)
         top = client.evaluate("window.scrollY || 0")
         step(5, "Taking a snapshot")
-        screenshot = _run_rea(node, ["capture-web-screenshot", endpoint, target_id], timeout=120)
+        screenshot = _run_rea(node, ["capture-web-screenshot", endpoint, target_id], timeout=300)
         png_saved = _decode_snapshot(screenshot, snapshot_path)
         evidence("Jarvis", "scroll-top", "Input.dispatchMouseEvent", {"scrollY": top}, "wheeled back to top")
         evidence("REA", "snapshot", "capture-web-screenshot",
@@ -1107,7 +1112,10 @@ def run_teardown(url, command=None, headless: bool = False, progress=None) -> di
             }
         )
     except Exception as exc:
-        result["reply"] = f"The teardown could not be completed, sir: {_snippet(exc, 200)}"
+        detail = _snippet(exc, 160)
+        if isinstance(exc, (socket.timeout, TimeoutError, subprocess.TimeoutExpired)):
+            detail = f"{current_label or 'a browser read'} timed out: {detail}"
+        result["reply"] = f"The teardown could not be completed, sir: {detail}"
     finally:
         if client is not None:
             client.close()

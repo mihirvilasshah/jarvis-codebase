@@ -488,19 +488,24 @@ def _teardown_brain(digest: str, question: str, host: str) -> str:
         "Host: " + host + "\nQuestion: " + question + "\n\n"
         "EVIDENCE (each line labelled REA or Jarvis):\n" + digest
     )
-    data = brain._post_chat(
-        config,
-        {
-            "model": config["model"],
-            "messages": [
-                {"role": "system", "content": TEARDOWN_SYSTEM},
-                {"role": "user", "content": user},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 7000,
-            "stream": False,
-        },
-    )
+    previous_timeout = brain.REQUEST_TIMEOUT
+    brain.REQUEST_TIMEOUT = 180
+    try:
+        data = brain._post_chat(
+            config,
+            {
+                "model": config["model"],
+                "messages": [
+                    {"role": "system", "content": TEARDOWN_SYSTEM},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": 0.3,
+                "max_tokens": 7000,
+                "stream": False,
+            },
+        )
+    finally:
+        brain.REQUEST_TIMEOUT = previous_timeout
     text = brain._extract_text(data)
     if not text:
         raise brain.BrainError(502, "empty_response", "The teardown writer returned nothing, sir.")
