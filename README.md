@@ -230,17 +230,20 @@ network requirements vary. The action panel also accepts typed commands:
   `Visit https://apple.com/mac in Firefox`. Website navigation requires the
   same confirmation and browser support; the browser controls which window
   receives the tab, so the current window is not guaranteed.
+- `Open File Explorer` (Windows only; confirmation required). This opens
+  File Explorer itself; opening a specific file or folder is not supported.
 - `Research solid-state batteries` or `Tear down example.com`
 
-Common browser and website commands work without an AI model. For other
-wording, the optional local Ollama model configured above can classify browser
-actions; it must use a loopback `OLLAMA_BASE_URL` and a model already installed
-in Ollama. The local server must be restarted after changing these variables.
-If Ollama is unavailable or its output is invalid, JARVIS reports the error
-and asks for an explicit command. The model cannot supply an address: the
-address must appear in your request. Only validated HTTP(S) addresses are
-accepted, and confirmation is always required. This classifier does not
-perform arbitrary computer control.
+Common browser, website, and File Explorer commands work without an AI model. For other wording,
+JARVIS uses the existing FreeLLMAPI configuration described above, regardless of
+Ollama settings. This sends the unrecognized command text to the configured FreeLLMAPI
+gateway and potentially its external model provider; do not include sensitive
+information in such commands. The local server must be restarted after changing
+environment variables. Invalid model output or
+gateway errors are reported. The model cannot supply an address: the address
+must appear in your request. Only validated HTTP(S) addresses are accepted, and
+confirmation is always required. This classifier does not perform arbitrary
+computer control.
 
 Task titles must match exactly for voice completion/postponement; duplicate
 titles must be selected in the panel. Use the date/time picker for explicit

@@ -1217,7 +1217,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="./graph-data.js"></script>
-  <script src="./action-commands.js?v=hybrid-actions-3"></script>
+  <script src="./action-commands.js?v=hybrid-actions-4"></script>
   <script>
     window.__kgErrors = [];
     window.addEventListener('error', function (event) {
@@ -3538,7 +3538,7 @@
       if (!thought) return;
       stopListening();
       if (activeVoiceMode === 'actions') {
-        if (['open_browser', 'open_url'].includes(JarvisActionCommands.parse(thought).type)) {
+        if (['open_browser', 'open_url', 'open_file_explorer'].includes(JarvisActionCommands.parse(thought).type)) {
           runActionCommand(thought);
           return;
         }
@@ -3764,8 +3764,8 @@
       } : {cache: 'no-store'};
       const response = await fetch('/actions', options);
       const data = await response.json();
-      if (response.status === 404 && payload && ['open_browser', 'open_url', 'classify'].includes(payload.operation)) {
-        throw new Error('Restart the local JARVIS server to enable browser actions.');
+      if (response.status === 404 && payload && ['open_browser', 'open_url', 'open_file_explorer', 'classify'].includes(payload.operation)) {
+        throw new Error('Restart the local JARVIS server to enable actions.');
       }
       if (response.status === 409 && payload && payload.operation === 'claim_notification') return {ok: false};
       if (!response.ok) throw new Error(data.error || 'The item has already changed or no longer exists.');
@@ -3900,6 +3900,27 @@
         } finally {
           setBusy(false);
         }
+      }
+      if (command.type === 'open_file_explorer') {
+        if (!localActions) {
+          const message = 'Opening File Explorer is available only on the local JARVIS server.';
+          toast(message);
+          speak(message);
+          return;
+        }
+        if (!window.confirm('Open File Explorer on this computer?')) {
+          toast('File Explorer action cancelled.');
+          return;
+        }
+        try {
+          await actionRequest({operation: 'open_file_explorer', confirmed: true});
+          toast('Started File Explorer.');
+          speak('Started File Explorer.');
+        } catch (error) {
+          toast(error.message);
+          speak(error.message);
+        }
+        return;
       }
       if (command.type === 'open_browser' || command.type === 'open_url') {
         if (!localActions) {

@@ -18,6 +18,11 @@ assert.deepEqual(commands.parse('open another browser', now), {type: 'open_brows
 assert.deepEqual(commands.parse('open chrome', now), {type: 'open_browser', browser: 'chrome', new_tab: false});
 assert.deepEqual(commands.parse('open new tab in Microsoft Edge', now), {type: 'open_browser', browser: 'edge', new_tab: true});
 assert.deepEqual(commands.parse('open Firefox in a new tab', now), {type: 'open_browser', browser: 'firefox', new_tab: true});
+for (const command of ['open file explorer', 'Hey Jarvis, could you open the File Explorer?', 'launch windows explorer']) {
+  assert.deepEqual(commands.parse(command, now), {type: 'open_file_explorer'});
+}
+assert.equal(commands.parse('open file explorer to downloads', now).type, 'unknown');
+assert.equal(commands.parse('do not open file explorer', now).type, 'unknown');
 assert.deepEqual(commands.parse('open apple.com in a new tab', now),
   {type: 'open_url', browser: 'default', new_tab: true, url: 'https://apple.com'});
 assert.deepEqual(commands.parse('Jarvis, open apple dot com in a new tab', now),

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import actions
 import action_router
+import brain
 import server
 
 
@@ -104,20 +105,23 @@ class FirefoxTests(unittest.TestCase):
                 actions.launch_browser("firefox", True, "https://apple.com/mac")
             popen.assert_called_once_with([str(executable), "-new-tab", "https://apple.com/mac"], close_fds=True)
 
+    def test_file_explorer_launch_uses_fixed_system_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "explorer.exe"
+            executable.touch()
+            with patch.dict("os.environ", {"SystemRoot": directory}), patch("actions.subprocess.Popen") as popen:
+                actions.launch_file_explorer()
+            popen.assert_called_once_with([str(executable)], close_fds=True)
+
 
 class RouterTests(unittest.TestCase):
-    class Provider:
-        base = "http://localhost:11434"
-        model = "local-model"
-
-        def __init__(self, response):
-            self.response = response
-
-        def available(self):
-            return True
-
-        def generate(self, prompt):
-            return self.response
+    def setUp(self):
+        config = patch.object(brain, "get_config", return_value={"model": "auto"})
+        self.addCleanup(config.stop)
+        config.start()
+        call = patch.object(brain, "_call_llm")
+        self.addCleanup(call.stop)
+        self.call = call.start()
 
     def test_url_validation(self):
         self.assertEqual(actions.validate_web_url("https://apple.com/mac"), "https://apple.com/mac")
@@ -127,42 +131,42 @@ class RouterTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 actions.validate_web_url(value)
 
-    def test_local_model_uses_only_url_from_user_input(self):
-        provider = self.Provider('{"type":"open_url","browser":"default","new_tab":true}')
-        result = action_router.classify("Could you take me to apple dot com?", provider)
+    def test_model_uses_only_url_from_user_input(self):
+        self.call.return_value = '{"type":"open_url","browser":"default","new_tab":true}'
+        result = action_router.classify("Could you take me to apple dot com?")
         self.assertEqual(result, {"type": "open_url", "browser": "default", "new_tab": True, "url": "https://apple.com"})
-        self.assertEqual(action_router.classify("Open apple.com and example.com", provider), {"type": "clarify"})
-        self.assertEqual(action_router.classify("Open a website", provider), {"type": "clarify"})
-        self.assertEqual(action_router.classify("Do not open apple.com", provider), {"type": "clarify"})
-        self.assertEqual(action_router.classify("Open https://apple.com:8080", provider), {"type": "clarify"})
+        self.assertEqual(action_router.classify("Open apple.com and example.com"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("Open a website"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("Do not open apple.com"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("Open https://apple.com:8080"), {"type": "clarify"})
 
     def test_rejects_invalid_or_invented_actions(self):
-        provider = self.Provider('{"type":"open_browser","browser":"chrome","new_tab":false}')
-        self.assertEqual(action_router.classify("open a browser", provider), {"type": "clarify"})
-        provider.response = '{"type":"open_url","browser":"chrome","new_tab":true}'
-        self.assertEqual(action_router.classify("take me to chrome.com", provider), {"type": "clarify"})
-        self.assertEqual(action_router.classify("take me to apple.com in chrome", provider)["browser"], "chrome")
-        provider.response = '{"type":"open_url","browser":"default","new_tab":true,"url":"https://evil.com"}'
+        self.call.return_value = '{"type":"open_browser","browser":"chrome","new_tab":false}'
+        self.assertEqual(action_router.classify("open a browser"), {"type": "clarify"})
+        self.call.return_value = '{"type":"open_url","browser":"chrome","new_tab":true}'
+        self.assertEqual(action_router.classify("take me to chrome.com"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("take me to apple.com in chrome")["browser"], "chrome")
+        self.call.return_value = '{"type":"open_url","browser":"default","new_tab":true,"url":"https://evil.com"}'
         with self.assertRaises(RuntimeError):
-            action_router.classify("open apple.com", provider)
-        provider.response = '{"type":"run_shell","browser":"default","new_tab":false}'
+            action_router.classify("open apple.com")
+        self.call.return_value = '{"type":"run_shell","browser":"default","new_tab":false}'
         with self.assertRaises(RuntimeError):
-            action_router.classify("open a browser", provider)
-        provider.base = "https://remote.example"
-        with self.assertRaisesRegex(RuntimeError, "loopback"):
-            action_router.classify("open a browser", provider)
+            action_router.classify("open a browser")
 
-    def test_classifier_reports_configuration_and_model_errors(self):
-        provider = self.Provider("not JSON")
+    def test_classifier_reports_model_errors(self):
+        self.call.return_value = "not JSON"
         with self.assertRaisesRegex(RuntimeError, "invalid JSON"):
-            action_router.classify("open a browser", provider)
-        provider.model = ""
-        with self.assertRaisesRegex(RuntimeError, "not configured"):
-            action_router.classify("open a browser", provider)
-        provider.model = "local-model"
-        with patch.object(provider, "available", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "unavailable"):
-                action_router.classify("open a browser", provider)
+            action_router.classify("open a browser")
+        self.call.return_value = '```json\n{"type":"open_url","browser":"default","new_tab":true}\n```'
+        self.assertEqual(action_router.classify("open apple.com")["url"], "https://apple.com")
+
+    def test_model_file_explorer_requires_user_mention(self):
+        self.call.return_value = '{"type":"open_file_explorer","browser":"default","new_tab":false}'
+        self.assertEqual(action_router.classify("Please bring up file explorer"), {"type": "open_file_explorer"})
+        self.assertEqual(action_router.classify("Jarvis, bring up Windows Explorer"), {"type": "open_file_explorer"})
+        self.assertEqual(action_router.classify("open a browser"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("open file explorer to downloads"), {"type": "clarify"})
+        self.assertEqual(action_router.classify("don't open file explorer"), {"type": "clarify"})
 
 
 class LocalApiTests(unittest.TestCase):
@@ -260,6 +264,23 @@ class LocalApiTests(unittest.TestCase):
             self.assertEqual(self.request("POST", json.dumps(payload), headers)[0], 200)
             launch.assert_called_once_with("default", True, "https://apple.com")
 
+    def test_file_explorer_requires_confirmation_and_no_arguments(self):
+        headers = {"Origin": "http://" + self.host, "Content-Type": "application/json", "X-Jarvis-Action": "1"}
+        payload = {"operation": "open_file_explorer"}
+        with patch.object(actions, "launch_file_explorer") as launch:
+            self.assertEqual(self.request("POST", json.dumps(payload), headers)[0], 400)
+            payload["confirmed"] = True
+            payload["path"] = "C:\\"
+            self.assertEqual(self.request("POST", json.dumps(payload), headers)[0], 400)
+            launch.assert_not_called()
+            del payload["path"]
+            self.assertEqual(self.request("POST", json.dumps(payload), headers)[0], 200)
+            launch.assert_called_once_with()
+        with patch.object(actions, "launch_file_explorer", side_effect=FileNotFoundError("File Explorer was not found.")):
+            status, data = self.request("POST", json.dumps(payload), headers)
+        self.assertEqual(status, 503)
+        self.assertEqual(data["error"], "File Explorer was not found.")
+
     def test_model_classification_endpoint(self):
         headers = {"Origin": "http://" + self.host, "Content-Type": "application/json", "X-Jarvis-Action": "1"}
         body = json.dumps({"operation": "classify", "text": "Take me to apple.com"})
@@ -268,10 +289,34 @@ class LocalApiTests(unittest.TestCase):
             status, data = self.request("POST", body, headers)
         self.assertEqual(status, 200)
         self.assertEqual(data["action"], result)
-        with patch.object(action_router, "classify", side_effect=RuntimeError("Ollama unavailable.")):
+        with patch.object(action_router, "classify", side_effect=RuntimeError("Invalid response.")):
             status, data = self.request("POST", body, headers)
         self.assertEqual(status, 503)
-        self.assertEqual(data["error"], "Ollama unavailable.")
+        self.assertEqual(data["error"], "Invalid response.")
+
+    def test_freellm_error_is_reported_by_api(self):
+        headers = {"Origin": "http://" + self.host, "Content-Type": "application/json", "X-Jarvis-Action": "1"}
+        body = json.dumps({"operation": "classify", "text": "Take me to apple.com"})
+        with patch.object(action_router, "classify", side_effect=brain.BrainError(429, "rate_limited", "Rate limited.")):
+            status, data = self.request("POST", body, headers)
+        self.assertEqual(status, 429)
+        self.assertEqual(data["error"], "Rate limited.")
+        self.assertEqual(data["code"], "rate_limited")
+
+    def test_api_classifies_with_freellm_even_when_ollama_is_configured(self):
+        headers = {"Origin": "http://" + self.host, "Content-Type": "application/json", "X-Jarvis-Action": "1"}
+        body = json.dumps({"operation": "classify", "text": "Take me to apple.com"})
+        response = '{"type":"open_url","browser":"default","new_tab":true}'
+        with patch.dict("os.environ", {"OLLAMA_MODEL": "configured"}), \
+                patch.object(brain, "get_config", return_value={"model": "auto"}), \
+                patch.object(brain, "_post_chat", return_value={"choices": [{"message": {"content": response}}]}) as post, \
+                patch.object(actions, "launch_browser") as launch:
+            status, data = self.request("POST", body, headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(data["action"]["url"], "https://apple.com")
+        messages = post.call_args.args[1]["messages"]
+        self.assertEqual(messages[-1], {"role": "user", "content": json.dumps("Take me to apple.com")})
+        launch.assert_not_called()
 
 
 if __name__ == "__main__":

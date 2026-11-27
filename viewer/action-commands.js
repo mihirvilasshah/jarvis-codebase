@@ -43,6 +43,9 @@
     if (/^(?:open|launch|start|visit|go to)(?:\s+(?:a|the|this)\s+(?:website|site|page))?$/i.test(request)) {
       return {type: 'clarify'};
     }
+    if (/^(?:open|launch|start)\s+(?:(?:the|my)\s+)?(?:file|windows)\s+explorer$/i.test(request)) {
+      return {type: 'open_file_explorer'};
+    }
     const browserName = '(?:(?:mozilla\\s+)?firefox|(?:google\\s+)?chrome|(?:microsoft\\s+)?edge|(?:web\\s+)?browser)';
     const spoken = request.replace(/\s+dot\s+/gi, '.');
     const address = '((?:https?:\\/\\/)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?:[\\/?#][^\\s]*)?)';

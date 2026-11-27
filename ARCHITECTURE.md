@@ -17,10 +17,14 @@ Ollama prompts explicitly prohibit instructions in retrieved text.
 
 The HUD uses the existing single browser recognition instance; explicit action
 commands are parsed by `viewer/action-commands.js`. Unrecognized action
-commands can be classified by an optional loopback Ollama model via
-`action_router.py`; unsupported or ambiguous results ask for clarification.
+commands can be classified via `action_router.py` by the existing FreeLLMAPI
+gateway regardless of Ollama settings. This sends command text to the gateway
+and potentially its upstream provider.
+Unsupported or ambiguous results ask for clarification.
 The model may only propose an allowlisted action and browser, while website
 addresses are extracted from the user's text and validated independently.
+File Explorer launches require confirmation and use the Windows system
+executable without accepting file paths or arguments.
 The notes microphone, research and REA retain their
 separate paths. The task/reminder panel provides equivalent typed controls.
 

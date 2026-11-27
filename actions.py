@@ -116,6 +116,18 @@ def launch_firefox():
     launch_browser("firefox")
 
 
+def launch_file_explorer():
+    if sys.platform != "win32":
+        raise FileNotFoundError("Opening File Explorer is available on Windows only.")
+    root = os.environ.get("SystemRoot")
+    if not root or not Path(root).is_absolute():
+        raise FileNotFoundError("The Windows system directory could not be found.")
+    executable = Path(root) / "explorer.exe"
+    if not executable.is_file():
+        raise FileNotFoundError("Windows File Explorer was not found.")
+    subprocess.Popen([str(executable)], close_fds=True)
+
+
 def _text(value):
     if not isinstance(value, str) or not value.strip() or len(value.strip()) > 300:
         raise ValueError("Provide a title between 1 and 300 characters.")

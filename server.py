@@ -980,6 +980,14 @@ class Handler(SimpleHTTPRequestHandler):
                 operation = payload.get("operation")
                 if operation == "classify":
                     self._json(200, {"ok": True, "action": action_router.classify(payload.get("text"))})
+                elif operation == "open_file_explorer":
+                    if payload.get("confirmed") is not True:
+                        self._json(400, {"error": "Confirm before opening File Explorer."})
+                    elif set(payload) != {"operation", "confirmed"}:
+                        self._json(400, {"error": "Opening File Explorer does not accept a path or arguments."})
+                    else:
+                        actions.launch_file_explorer()
+                        self._json(200, {"ok": True})
                 elif operation in ("open_firefox", "open_browser", "open_url"):
                     if payload.get("confirmed") is not True:
                         self._json(400, {"error": "Confirm before opening a browser."})
@@ -1000,13 +1008,15 @@ class Handler(SimpleHTTPRequestHandler):
                     self._json(200 if changed else 409, {"ok": changed})
             except ValueError as exc:
                 self._json(400, {"error": str(exc)})
+            except brain.BrainError as exc:
+                self._json(exc.status, {"error": exc.message, "code": exc.code})
             except FileNotFoundError as exc:
                 self._json(503, {"error": str(exc)})
             except RuntimeError as exc:
                 self._json(503, {"error": str(exc)})
             except OSError:
                 traceback.print_exc()
-                self._json(500, {"error": "The browser could not be opened."})
+                self._json(500, {"error": "The requested application could not be opened."})
             except Exception:
                 traceback.print_exc()
                 self._json(500, {"error": "Could not update local actions."})

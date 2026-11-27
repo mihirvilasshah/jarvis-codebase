@@ -1,6 +1,8 @@
 # Changelog
 
 ## Local action hub
+- Added a confirmation-gated Windows File Explorer action.
+- Use FreeLLMAPI to classify unrecognized actions regardless of Ollama settings.
 - Added confirmed website-opening commands and optional local Ollama
   interpretation for less predictable browser requests.
 - Added a confirmation-gated Windows Firefox launch command.
