@@ -730,6 +730,95 @@
     }
     #voice-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    /* Arc reactor HUD: a chest-mounted core that breathes at rest and fires
+       on every spoken word. --reactor is driven from the voice engine. */
+    .reactor {
+      --reactor: 0.12;
+      position: fixed;
+      right: 26px;
+      bottom: 190px;
+      z-index: 11;
+      width: 116px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      pointer-events: none;
+      user-select: none;
+      filter: drop-shadow(0 0 calc(9px + var(--reactor) * 24px) rgba(103, 232, 249, calc(0.12 + var(--reactor) * 0.42)));
+    }
+    .reactor-aura {
+      position: absolute;
+      top: 44%;
+      left: 50%;
+      width: 210%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(calc(0.72 + var(--reactor) * 0.5));
+      background: radial-gradient(circle,
+        rgba(103, 232, 249, calc(0.10 + var(--reactor) * 0.24)) 0%,
+        rgba(59, 130, 246, calc(0.04 + var(--reactor) * 0.12)) 42%,
+        transparent 72%);
+      opacity: calc(0.55 + var(--reactor) * 0.45);
+    }
+    .reactor-rig {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      transform: scale(calc(1 + var(--reactor) * 0.045));
+    }
+    .reactor-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+    .reactor-ticks line { stroke: rgba(148, 184, 224, 0.42); stroke-width: 1.1; }
+    .reactor-rotor {
+      transform-box: view-box;
+      transform-origin: 110px 110px;
+      animation: reactorSpin 22s linear infinite;
+    }
+    .reactor-coils path {
+      fill: rgba(103, 232, 249, calc(0.09 + var(--reactor) * 0.4));
+      stroke: rgba(103, 232, 249, calc(0.22 + var(--reactor) * 0.56));
+      stroke-width: 1;
+    }
+    .reactor-ring {
+      stroke: #67e8f9;
+      stroke-opacity: calc(0.4 + var(--reactor) * 0.6);
+      stroke-width: calc(1.4px + var(--reactor) * 2.6px);
+    }
+    .reactor-halo { fill: #67e8f9; opacity: calc(0.2 + var(--reactor) * 0.65); }
+    .reactor-core { opacity: calc(0.78 + var(--reactor) * 0.22); }
+    .reactor-hot {
+      fill: #ffffff;
+      opacity: calc(0.5 + var(--reactor) * 0.5);
+      transform-box: fill-box;
+      transform-origin: center;
+      transform: scale(calc(0.7 + var(--reactor) * 0.6));
+    }
+    .reactor-ripple {
+      position: absolute;
+      inset: 12%;
+      border: 1px solid rgba(103, 232, 249, 0.65);
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .reactor-readout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.22em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+    .reactor-name { color: #7f9bb8; }
+    .reactor-status { color: #67e8f9; letter-spacing: 0.16em; }
+    .reactor[data-state="listening"] .reactor-status { color: var(--mint); }
+    .reactor[data-state="thinking"] .reactor-status { color: var(--gold); }
+    .reactor[data-state="muted"] .reactor-status { color: #a3768a; }
+    @keyframes reactorSpin { to { transform: rotate(360deg); } }
+
     .scene-tooltip { color: #e8f2ff; font-family: var(--font); font-size: 12px; }
     .tip { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(148, 184, 224, 0.22); border-radius: 10px; background: rgba(5, 11, 20, 0.9); backdrop-filter: blur(10px); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); }
     .tip small { display: block; margin-left: 2px; color: #7891ad; font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -782,10 +871,13 @@
       .chat-launcher { bottom: 12px; padding: 9px 15px; font-size: 11px; }
       .history-card { max-height: 80vh; padding: 16px; }
       .history-head h2 { font-size: 21px; }
+      .reactor { top: 88px; right: 14px; bottom: auto; width: 84px; gap: 3px; }
+      .reactor-readout { font-size: 7px; letter-spacing: 0.12em; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+      .reactor { filter: none; }
     }
   </style>
 </head>
@@ -864,6 +956,54 @@
   <button id="chat-launcher" class="chat-launcher" type="button" aria-label="Open chat">
     <span aria-hidden="true">✦</span> Ask your notes
   </button>
+
+  <div id="reactor" class="reactor" data-state="idle" aria-hidden="true">
+    <div class="reactor-aura"></div>
+    <div class="reactor-rig">
+      <div class="reactor-ripple"></div>
+      <svg class="reactor-svg" viewBox="0 0 220 220" aria-hidden="true">
+        <defs>
+          <radialGradient id="rg-core">
+            <stop offset="0" stop-color="#ffffff" />
+            <stop offset="0.16" stop-color="#dffbff" />
+            <stop offset="0.42" stop-color="#67e8f9" />
+            <stop offset="0.74" stop-color="#1c86bd" />
+            <stop offset="1" stop-color="#082f4a" />
+          </radialGradient>
+          <linearGradient id="rg-metal" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#435b76" />
+            <stop offset="0.45" stop-color="#0c1725" />
+            <stop offset="1" stop-color="#24374c" />
+          </linearGradient>
+          <filter id="rg-blur" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="7" />
+          </filter>
+        </defs>
+        <circle cx="110" cy="110" r="99" fill="url(#rg-metal)" stroke="#6383a3" stroke-width="1.4" />
+        <circle cx="110" cy="110" r="93" fill="#050b13" stroke="#17344b" stroke-width="2" />
+        <g class="reactor-ticks"></g>
+        <circle cx="110" cy="110" r="78" fill="#071521" stroke="#25506b" stroke-width="1" />
+        <g class="reactor-rotor">
+          <circle cx="110" cy="110" r="74" fill="none" stroke="#1d5e7d" stroke-width="3" stroke-dasharray="2 11" />
+          <circle cx="110" cy="36" r="3.4" fill="#67e8f9" />
+          <circle cx="110" cy="184" r="3.4" fill="#a78bfa" />
+        </g>
+        <g class="reactor-coils">
+          <path d="M110 36 L130 77 L90 77 Z" />
+          <path d="M110 36 L130 77 L90 77 Z" transform="rotate(120 110 110)" />
+          <path d="M110 36 L130 77 L90 77 Z" transform="rotate(240 110 110)" />
+        </g>
+        <circle class="reactor-ring" cx="110" cy="110" r="56" fill="none" />
+        <circle class="reactor-halo" cx="110" cy="110" r="42" filter="url(#rg-blur)" />
+        <circle class="reactor-core" cx="110" cy="110" r="34" fill="url(#rg-core)" />
+        <circle class="reactor-hot" cx="110" cy="110" r="11" />
+      </svg>
+    </div>
+    <div class="reactor-readout">
+      <span class="reactor-name">Arc Reactor</span>
+      <span class="reactor-status" id="reactor-status">Standby</span>
+    </div>
+  </div>
 
   <div id="screen-indicator" class="screen-indicator" role="status" aria-live="assertive">Screen being shared</div>
   <video id="screen-video" autoplay muted playsinline style="display:none" aria-hidden="true"></video>
@@ -2771,6 +2911,180 @@
     }
 
     /* =====================================================================
+       ARC REACTOR — a HUD heart that beats with the voice.
+
+       Speech synthesis exposes no audio samples, so the beat is built from
+       word-boundary events (one kick per word) over a reading-pace swell.
+       While the mic is live, an AnalyserNode adds the user's own amplitude.
+       Everything here is visual; nothing in this block makes a sound.
+       ===================================================================== */
+    const reactorEl = $('reactor');
+    const reactorStatusEl = $('reactor-status');
+    const voiceLineEl = $('voice-line');
+    const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const REACTOR_STATUS = {
+      idle: 'Standby', listening: 'Listening', thinking: 'Analysing',
+      speaking: 'Online', muted: 'Muted'
+    };
+    const reactorState = {
+      level: 0.12, impulse: 0, speaking: false, listening: false,
+      mic: 0, last: 0, start: performance.now(), state: ''
+    };
+    let micStream = null, micContext = null, micAnalyser = null, micData = null;
+
+    function reactorKick(strength) {
+      if (reduceMotion) return;
+      reactorState.impulse = Math.min(1.3, reactorState.impulse + (strength || 0.5));
+    }
+
+    function reactorSpeakStart() {
+      reactorState.speaking = true;
+      reactorKick(0.9);
+    }
+
+    function reactorSpeakEnd() {
+      reactorState.speaking = false;
+    }
+
+    function reactorBoundary() {
+      reactorKick(0.52);
+      const ripple = reactorEl && reactorEl.querySelector('.reactor-ripple');
+      if (ripple && ripple.animate && !reduceMotion) {
+        try {
+          ripple.animate(
+            [{ transform: 'scale(0.82)', opacity: 0.7 }, { transform: 'scale(1.4)', opacity: 0 }],
+            { duration: 480, easing: 'ease-out' }
+          );
+        } catch { /* the ripple is decoration only */ }
+      }
+    }
+
+    function reactorMicStart() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      reactorMicStop();
+      try {
+        Promise.resolve(navigator.mediaDevices.getUserMedia({ audio: true })).then((media) => {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx || !reactorState.listening) {
+            for (const track of media.getTracks()) { try { track.stop(); } catch { /* already stopped */ } }
+            return;
+          }
+          micStream = media;
+          micContext = new AudioCtx();
+          const source = micContext.createMediaStreamSource(media);
+          micAnalyser = micContext.createAnalyser();
+          micAnalyser.fftSize = 256;
+          micAnalyser.smoothingTimeConstant = 0.55;
+          source.connect(micAnalyser);
+          micData = new Uint8Array(micAnalyser.fftSize);
+          if (micContext.state === 'suspended') micContext.resume().catch(() => {});
+        }).catch(() => { /* the mic beat is optional; the reactor still breathes */ });
+      } catch { /* ignore */ }
+    }
+
+    function reactorMicStop() {
+      reactorState.mic = 0;
+      if (micStream) {
+        for (const track of micStream.getTracks()) { try { track.stop(); } catch { /* already stopped */ } }
+      }
+      micStream = null;
+      micAnalyser = null;
+      micData = null;
+      if (micContext) { try { micContext.close(); } catch { /* already closed */ } }
+      micContext = null;
+    }
+
+    function reactorListenStart() {
+      reactorState.listening = true;
+      reactorMicStart();
+    }
+
+    function reactorListenStop() {
+      reactorState.listening = false;
+      reactorMicStop();
+    }
+
+    function reactorFrame(now) {
+      window.requestAnimationFrame(reactorFrame);
+      if (!reactorEl) return;
+      const dt = Math.min(80, now - (reactorState.last || now));
+      reactorState.last = now;
+      reactorState.impulse *= Math.exp(-dt / 145);
+
+      let micLevel = 0;
+      if (micAnalyser && micData) {
+        try {
+          micAnalyser.getByteTimeDomainData(micData);
+          let sum = 0;
+          for (let i = 0; i < micData.length; i += 1) {
+            const value = (micData[i] - 128) / 128;
+            sum += value * value;
+          }
+          micLevel = Math.min(1, Math.sqrt(sum / micData.length) * 4.5);
+        } catch { /* analyser may be closing */ }
+      }
+      reactorState.mic += (micLevel - reactorState.mic) * Math.min(1, dt / 90);
+
+      const vs = voiceLineEl ? (voiceLineEl.dataset.state || 'idle') : 'idle';
+      const t = (now - reactorState.start) / 1000;
+      let state = vs;
+      let base;
+      if (reactorState.speaking || vs === 'speaking') {
+        state = 'speaking';
+        // A steady ~1.6 Hz swell keeps a beat where boundary events are sparse.
+        base = 0.28 + 0.17 * (0.5 + 0.5 * Math.sin(t * 10));
+      } else if (vs === 'listening') {
+        base = 0.1 + reactorState.mic * 0.7;
+      } else if (vs === 'thinking') {
+        base = 0.17 + 0.09 * (0.5 + 0.5 * Math.sin(t * 5));
+      } else if (vs === 'muted') {
+        base = 0.05;
+      } else {
+        base = 0.1 + 0.045 * (0.5 + 0.5 * Math.sin(t * 1.7));
+      }
+      const target = Math.max(0, Math.min(1.2,
+        base + reactorState.impulse + (state === 'listening' ? reactorState.mic * 0.3 : 0)));
+      reactorState.level += (target - reactorState.level) * Math.min(1, dt / 42);
+
+      if (!reduceMotion) reactorEl.style.setProperty('--reactor', reactorState.level.toFixed(3));
+      if (state !== reactorState.state) {
+        reactorState.state = state;
+        reactorEl.dataset.state = state;
+        if (reactorStatusEl) reactorStatusEl.textContent = REACTOR_STATUS[state] || 'Standby';
+      }
+    }
+
+    if (reactorEl) {
+      const ticks = reactorEl.querySelector('.reactor-ticks');
+      if (ticks) {
+        let markup = '';
+        for (let i = 0; i < 24; i += 1) {
+          const angle = i * 15 * Math.PI / 180;
+          const outer = 88;
+          const inner = i % 2 === 0 ? 81 : 85;
+          const x1 = 110 + Math.cos(angle) * outer;
+          const y1 = 110 + Math.sin(angle) * outer;
+          const x2 = 110 + Math.cos(angle) * inner;
+          const y2 = 110 + Math.sin(angle) * inner;
+          markup += '<line x1="' + x1.toFixed(2) + '" y1="' + y1.toFixed(2) +
+            '" x2="' + x2.toFixed(2) + '" y2="' + y2.toFixed(2) + '"/>';
+        }
+        ticks.innerHTML = markup;
+      }
+      window.requestAnimationFrame(reactorFrame);
+    }
+
+    if (new URLSearchParams(location.search).has('debug')) {
+      window.__kgReactor = {
+        level: () => reactorState.level,
+        state: () => reactorEl && reactorEl.dataset.state,
+        css: () => reactorEl && getComputedStyle(reactorEl).getPropertyValue('--reactor'),
+        kick: (amount) => reactorKick(amount),
+        mic: () => reactorState.mic
+      };
+    }
+
+    /* =====================================================================
        VOICE ENGINE
        speak() is the only function that makes sound, so the ?mute=1 guard
        inside it is the single place that can silence this tab.
@@ -2868,24 +3182,30 @@
         /* nothing was playing */
       }
       hasRealSpeech = true;
+      reactorSpeakStart();
       const utterance = new SpeechSynthesisUtterance(clean);
       const voice = pickVoice();
       if (voice) utterance.voice = voice;
       utterance.lang = voice && voice.lang ? voice.lang : 'en-GB';
       utterance.rate = 1.02;
       utterance.pitch = 1;
+      // Every word boundary (and any sentence boundary a browser reports) is a beat.
+      utterance.onboundary = () => reactorBoundary();
       utterance.onend = () => {
         hasRealSpeech = false;
+        reactorSpeakEnd();
         setVoiceLine(wantListening ? 'listening' : 'idle');
       };
       utterance.onerror = () => {
         hasRealSpeech = false;
+        reactorSpeakEnd();
         setVoiceLine(wantListening ? 'listening' : 'idle');
       };
       setVoiceLine('speaking');
       try {
         SpeechSynth.speak(utterance);
       } catch {
+        reactorSpeakEnd();
         setVoiceLine('idle');
       }
     }
@@ -2902,6 +3222,7 @@
       // first gesture, and cutting it can lose that unlock.
       if (!SpeechSynth || !hasRealSpeech) return;
       hasRealSpeech = false;
+      reactorSpeakEnd();
       try {
         SpeechSynth.cancel();
       } catch {
@@ -2988,6 +3309,7 @@
       unlockVoice();
       cancelSpeech(); // never talk over the person speaking
       if (!recognition) recognition = makeRecognition();
+      reactorListenStart();
       wantListening = true;
       voiceBuffer = '';
       interimLive = '';
@@ -3011,6 +3333,7 @@
 
     function stopListening() {
       clearFinishTimer();
+      reactorListenStop();
       wantListening = false;
       voiceBuffer = '';
       interimLive = '';
@@ -3086,6 +3409,7 @@
       instance.onerror = (event) => {
         const reason = event && event.error ? event.error : '';
         if (reason === 'no-speech' || reason === 'aborted') return; // normal pauses
+        reactorListenStop();
         wantListening = false;
         updateMic();
         setVoiceLine('idle');
@@ -3102,6 +3426,7 @@
 
       instance.onend = () => {
         if (!wantListening) {
+          reactorListenStop();
           updateMic();
           if (voiceLine.dataset.state === 'listening') setVoiceLine('idle');
           return;

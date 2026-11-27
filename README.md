@@ -91,6 +91,18 @@ malformed upstream responses.
 - Buttons are disabled while a request is in flight so a reply cannot land in the
   wrong conversation.
 
+## Arc reactor HUD
+
+A circular arc-reactor readout sits in the lower right of the viewer (upper right on
+small screens). It breathes slowly at rest and pulses with the voice: each spoken
+word fires a beat from `SpeechSynthesisUtterance.onboundary`, over a steady
+reading-pace swell so the rhythm survives browsers that report few boundaries.
+While the microphone is live an `AnalyserNode` adds the speaker's own amplitude.
+The status line follows the voice state (Standby, Listening, Analysing, Online,
+Muted). The reactor is decoration only: it makes no sound, honours `?mute=1`, and
+respects `prefers-reduced-motion`. With `?debug=1`, `window.__kgReactor` exposes
+`level()`, `state()`, `css()`, `kick()` and `mic()` for checks.
+
 ## Deploy to Vercel
 
 The repository is ready: `vercel.json` builds the graph, publishes `viewer/` as
