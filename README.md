@@ -180,6 +180,36 @@ Deployment checks already performed:
   points at localhost; no key or internal detail leaks.
 - `/config.json` returns 404 on both local and Vercel; no key literal appears in HTML/JS.
 
+## Live web research
+
+Jarvis can search and summarize the live web through voice or chat:
+
+```text
+Jarvis, research the latest developments in solid-state batteries
+Compare the latest developments in India and China
+Give me the disadvantages
+Save this research
+```
+
+Install free dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Optional Ollama setup:
+
+```powershell
+$env:OLLAMA_MODEL="qwen3:8b"
+$env:OLLAMA_BASE_URL="http://localhost:11434"
+python server.py
+```
+
+When Ollama is absent or `OLLAMA_MODEL` is unset, Jarvis remains functional and displays extracted
+search-source evidence explicitly as an sources-only fallback. It never fabricates a local AI summary.
+Set `SEARXNG_URL` to a self-hosted SearXNG instance to add that provider. Research sessions are
+stored in `research.sqlite3`; full webpages are not persisted.
+
 ## The Bay - REA website observation
 
 Jarvis can observe public websites with [REA](https://github.com/morluto/rea)

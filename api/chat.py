@@ -18,6 +18,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import brain  # noqa: E402
+import research  # noqa: E402
 
 MAX_BODY_BYTES = 64 * 1024
 
@@ -70,6 +71,20 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path in ("/api/research", "/research"):
+            try:
+                length = int(self.headers.get("Content-Length", "0") or "0")
+                payload = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                topic = payload.get("question", payload.get("topic"))
+                if not isinstance(topic, str) or not topic.strip():
+                    self._json(400, {"ok": False, "error": "Please provide a research topic."})
+                    return
+                report = research.run_research(topic, research.detect_intent(topic))
+                self._json(200, {"ok": True, "research": report})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"ok": False, "error": "Live research could not be completed."})
+            return
         if path not in ("/api/chat", "/api/chat/", "/chat"):
             self._json(404, {"error": "Not found", "nodes": []})
             return

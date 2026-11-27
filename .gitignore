@@ -1,6 +1,7 @@
 # Local secrets and configuration
 config.json
 config.local.json
+research.sqlite3
 .env
 .env.*
 !.env.example

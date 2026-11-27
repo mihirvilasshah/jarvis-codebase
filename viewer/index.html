@@ -213,6 +213,40 @@
       overflow: auto;
     }
     .panel.open { transform: translateX(0); opacity: 1; }
+    .research-card {
+      position: fixed;
+      right: 24px;
+      top: 98px;
+      bottom: 126px;
+      z-index: 14;
+      width: min(520px, calc(100vw - 48px));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px;
+      border: 1px solid rgba(103,232,249,.24);
+      border-radius: 22px;
+      background: linear-gradient(160deg, rgba(12,22,38,.96), rgba(5,10,19,.96));
+      box-shadow: 0 30px 80px rgba(0,0,0,.58);
+      backdrop-filter: blur(22px);
+      transform: translateX(calc(100% + 48px));
+      opacity: 0;
+      transition: transform 380ms cubic-bezier(.22,1,.36,1), opacity 300ms ease;
+      overflow: auto;
+    }
+    .research-card.open { transform: translateX(0); opacity: 1; }
+    .research-card h2 { margin: 5px 0 2px; font-size: 24px; }
+    .research-meta { color: var(--muted); font: 9.5px var(--mono); text-transform: uppercase; letter-spacing:.08em; }
+    .research-progress { display:flex; align-items:center; gap:8px; color:var(--cyan); font:11px var(--mono); }
+    .research-progress i { width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan);animation:blink 1s infinite; }
+    .research-section { border-top:1px solid var(--line); padding-top:12px; }
+    .research-section h3 { margin:0 0 8px; color:#cfe8f7; font-size:12px; text-transform:uppercase; letter-spacing:.12em; }
+    .research-finding { border:1px solid var(--line); border-radius:12px; padding:10px; margin:7px 0; background:rgba(103,232,249,.035); }
+    .research-finding b { display:block; margin-bottom:4px; }
+    .research-source { display:block; color:#bcecf4; text-decoration:none; padding:7px 0; border-bottom:1px solid rgba(148,184,224,.08); }
+    .research-source:hover { color:#fff; }
+    .research-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:auto; }
+    .research-actions button { border:1px solid var(--line); border-radius:999px; background:rgba(7,14,25,.7); padding:8px 10px; color:#bcd6e9; cursor:pointer; font-size:10px; }
     .panel-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
     .badge {
       display: inline-flex;
@@ -915,6 +949,29 @@
       <div id="panel-links" class="link-list"></div>
     </div>
     <button id="panel-ask" class="ask-btn" type="button">Ask about this note →</button>
+  </aside>
+
+  <aside id="research-card" class="research-card" aria-hidden="true" aria-label="Live research results">
+    <div class="panel-top">
+      <span id="research-status" class="badge">Live research</span>
+      <button id="research-close" class="icon-btn" type="button" aria-label="Close research">×</button>
+    </div>
+    <h2 id="research-topic">Research</h2>
+    <div id="research-meta" class="research-meta"></div>
+    <div id="research-progress" class="research-progress"><i></i><span>Understanding your request</span></div>
+    <div id="research-results">
+      <div class="research-section"><h3>Executive summary</h3><p id="research-summary"></p></div>
+      <div class="research-section"><h3>Key findings</h3><div id="research-findings"></div></div>
+      <div class="research-section"><h3>Sources</h3><div id="research-sources"></div></div>
+    </div>
+    <div class="research-actions">
+      <button id="research-audio" type="button">Read summary</button>
+      <button id="research-stop" type="button">Stop audio</button>
+      <button id="research-copy" type="button">Copy summary</button>
+      <button id="research-export" type="button">Export Markdown</button>
+      <button id="research-save" type="button">Save research</button>
+      <button id="research-history" type="button">History</button>
+    </div>
   </aside>
 
   <section class="chat" id="chat" aria-label="Ask your notes">
@@ -2204,6 +2261,7 @@
     const isLocal4700 =
       (location.hostname === '127.0.0.1' || location.hostname === 'localhost') && location.port === '4700';
     const CHAT_ENDPOINT = window.KG_CHAT_ENDPOINT || (isLocal4700 ? '/chat' : '/api/chat');
+    const RESEARCH_ENDPOINT = isLocal4700 ? '/research' : '/api/research';
     const REMEMBER_ENDPOINT = window.KG_REMEMBER_ENDPOINT || '/remember';
     const REMEMBER_RE = /^\s*remember\s+that\b[\s,:;\-–—]*(.*)$/i;
 
@@ -2744,6 +2802,100 @@
       return message;
     }
 
+    function openResearchCard() {
+      const card = $('research-card');
+      card.classList.add('open');
+      card.setAttribute('aria-hidden', 'false');
+    }
+
+    function renderResearch(report) {
+      window.__jarvisResearch = report;
+      window.__jarvisResearchId = report.id;
+      openResearchCard();
+      $('research-topic').textContent = report.topic || 'Live research';
+      $('research-status').textContent = report.fallback ? 'Sources only · Ollama unavailable' : 'Research complete';
+      $('research-meta').textContent =
+        new Date(report.created_at).toLocaleString() + ' · ' + report.sources.length + ' sources · ' + report.depth;
+      $('research-progress').style.display = 'none';
+      $('research-summary').textContent = report.executive_summary || 'No summary available.';
+
+      const findings = $('research-findings');
+      findings.replaceChildren();
+      for (const finding of (report.key_findings || [])) {
+        const item = document.createElement('div');
+        item.className = 'research-finding';
+        const title = document.createElement('b');
+        title.textContent = finding.title || 'Finding';
+        const explanation = document.createElement('div');
+        explanation.textContent = finding.explanation || '';
+        item.append(title, explanation);
+        if (finding.evidence) {
+          const evidence = document.createElement('small');
+          evidence.textContent = finding.evidence;
+          item.appendChild(evidence);
+        }
+        findings.appendChild(item);
+      }
+
+      const sources = $('research-sources');
+      sources.replaceChildren();
+      for (const source of (report.sources || [])) {
+        const link = document.createElement('a');
+        link.className = 'research-source';
+        link.href = source.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = (source.title || source.domain) + ' · ' + source.domain;
+        sources.appendChild(link);
+      }
+    }
+
+    async function runLiveResearch(question) {
+      cancelSpeech();
+      recordMessage('user', question);
+      addMessage('user', question);
+      openResearchCard();
+      $('research-topic').textContent = 'Live research';
+      $('research-progress').style.display = 'flex';
+      $('research-progress').querySelector('span').textContent = 'Understanding your request';
+      setBusy(true);
+      try {
+        const response = await fetch(RESEARCH_ENDPOINT, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({question, research_id: window.__jarvisResearchId || null})
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Live research failed.');
+        renderResearch(data.research);
+        const answer = data.research.executive_summary || 'Research sources are ready.';
+        recordMessage('assistant', answer);
+        addMessage('assistant', answer);
+        speak(answer);
+      } catch (error) {
+        rollbackLastUser();
+        const message = error && error.message ? error.message : 'Live research failed.';
+        $('research-progress').style.display = 'flex';
+        $('research-progress').querySelector('span').textContent = message;
+        toast(message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function saveLiveResearch() {
+      if (!window.__jarvisResearchId) return;
+      const response = await fetch('/research/save', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({research_id:window.__jarvisResearchId})
+      });
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        toast('Research saved.');
+        speak('Research saved, sir.');
+      } else toast(data.error || 'Could not save research.');
+    }
+
     function setBusy(isBusy) {
       busy = isBusy;
       chatSend.disabled = isBusy;
@@ -2757,6 +2909,20 @@
     async function ask(question) {
       const text = String(question || '').trim();
       if (!text || chatSend.disabled) return;
+
+      if (/^(?:jarvis[\s,.!:]*)?(?:(?:please\s+)?(?:research|investigate|search(?:\s+the\s+)?web\s+for|find(?:\s+the)?\s+(?:latest\s+)?(?:information|news|developments)\s+(?:on|about)|what\s+is\s+happening\s+with|look\s+up)\b)/i.test(text)) {
+        await runLiveResearch(text);
+        return;
+      }
+      if (window.__jarvisResearchId && /^(?:jarvis[\s,.!:]*)?(?:explain|compare|summarize|summarise|give me|what about|find more|disadvantages?|advantages?|top [a-z0-9 ]+)/i.test(text)) {
+        await runLiveResearch(text);
+        return;
+      }
+      if (/^(?:save\s+this(?:\s+research)?|read\s+the\s+sources\s+aloud)$/i.test(text) && window.__jarvisResearchId) {
+        if (/^save\b/i.test(text)) await saveLiveResearch();
+        else if (window.__jarvisResearch) speak(window.__jarvisResearch.sources.map((s, i) => (i + 1) + '. ' + s.title + '. ' + s.url).join(' '));
+        return;
+      }
 
       if (handleTeardownText(text)) return;
 
@@ -3448,6 +3614,42 @@
     }
 
     voiceBtn.addEventListener('click', micToggle);
+
+    $('research-close').addEventListener('click', () => {
+      $('research-card').classList.remove('open');
+      $('research-card').setAttribute('aria-hidden', 'true');
+    });
+    $('research-audio').addEventListener('click', () => {
+      if (window.__jarvisResearch) speak(window.__jarvisResearch.executive_summary);
+    });
+    $('research-stop').addEventListener('click', () => cancelSpeech());
+    $('research-copy').addEventListener('click', async () => {
+      if (!window.__jarvisResearch) return;
+      try {
+        await navigator.clipboard.writeText(window.__jarvisResearch.executive_summary);
+        toast('Summary copied.');
+      } catch {
+        toast('Clipboard access is unavailable.');
+      }
+    });
+    $('research-export').addEventListener('click', async () => {
+      if (!window.__jarvisResearchId) return;
+      const response = await fetch('/research/export', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({research_id: window.__jarvisResearchId})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) { toast(data.error || 'Export failed.'); return; }
+      const blob = new Blob([data.markdown], {type:'text/markdown'});
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'jarvis-research.md';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    });
+    $('research-save').addEventListener('click', saveLiveResearch);
+    $('research-history').addEventListener('click', openHistory);
 
     if (new URLSearchParams(location.search).get('mute') === '1') {
       setVoiceLine('muted');

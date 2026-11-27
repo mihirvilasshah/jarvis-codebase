@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import brain
 import build
+import research
 
 # The gateway occasionally takes longer than its default 45 s under load.
 brain.REQUEST_TIMEOUT = 120
@@ -737,7 +738,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see", "/research", "/research/history", "/research/save", "/research/delete", "/research/export"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -747,6 +748,17 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        if path == "/research/history":
+            self._json(200, {"ok": True, "items": research.STORE.list()})
+            return
+        if path.startswith("/research/"):
+            research_id = path.rsplit("/", 1)[-1]
+            report = research.STORE.get(research_id)
+            if report:
+                self._json(200, {"ok": True, "research": report})
+            else:
+                self._json(404, {"ok": False, "error": "Research session not found."})
+            return
         if path == "/health":
             self._json(
                 200,
@@ -849,7 +861,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex", "/teardown", "/teardown/compose", "/teardown/cancel", "/see", "/research", "/research/history", "/research/save", "/research/delete", "/research/export"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -915,6 +927,57 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/research":
+            question = payload.get("question", payload.get("topic"))
+            if not isinstance(question, str) or not question.strip():
+                self._json(400, {"ok": False, "error": "Please provide a research topic."})
+                return
+            intent = research.detect_intent(question)
+            research_id = payload.get("research_id")
+            existing = research.ACTIVE.get(research_id) if research_id else None
+            if intent["kind"] == "follow_up" and existing:
+                followups = existing.setdefault("followups", [])
+                followups.append({"question": question, "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+                research.STORE.save(existing)
+                research_topic = existing.get("topic", question)
+                if re.search(r"\b(?:compare|advantages|disadvantages|more|five points|third|top)\b", question, re.I):
+                    research_topic = existing.get("topic", question) + " " + question
+            else:
+                research_topic = intent["topic"] if intent["kind"] == "research" else question
+            try:
+                report = research.run_research(research_topic, intent)
+                self._json(200, {"ok": True, "research": report})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"ok": False, "error": "Live research could not be completed."})
+            return
+
+        if path == "/research/save":
+            research_id = payload.get("research_id")
+            report = research.STORE.get(research_id) if research_id else None
+            if not report:
+                self._json(404, {"ok": False, "error": "Research session not found."})
+                return
+            report["saved"] = True
+            research.STORE.save(report, saved=True)
+            self._json(200, {"ok": True, "research": report})
+            return
+
+        if path == "/research/delete":
+            research_id = payload.get("research_id")
+            deleted = research.STORE.delete(research_id) if research_id else False
+            self._json(200, {"ok": True, "deleted": deleted})
+            return
+
+        if path == "/research/export":
+            research_id = payload.get("research_id")
+            report = research.STORE.get(research_id) if research_id else None
+            if not report:
+                self._json(404, {"ok": False, "error": "Research session not found."})
+                return
+            self._json(200, {"ok": True, "markdown": research.markdown(report)})
             return
 
         if path == "/teardown/cancel":
