@@ -143,8 +143,10 @@ def _tag_teardown(arg: str) -> tuple[bool, str]:
             "REA 6.10.1; nothing was touched.",
         )
     result = teardown.run_teardown(arg)
-    reply = str(result.get("reply") or "The teardown bay is not ready, sir. Nothing was touched.")
-    return bool(result.get("ok")), reply
+    if not result.get("ok"):
+        return False, str(result.get("reply") or "The teardown bay is not ready, sir. Nothing was touched.")
+    digest = str(result.get("digest_line") or result.get("reply") or "Observation complete, sir.")
+    return True, digest
 
 
 def run_control_tag(name: str, arg: str | None) -> tuple[bool, str]:

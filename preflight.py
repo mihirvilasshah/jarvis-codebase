@@ -76,6 +76,7 @@ class Context:
     graph: dict | None = None
     health: dict | None = None
     models: list | None = None
+    teardown_result: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1053,6 +1054,7 @@ def check_teardown_observe(ctx: Context) -> Outcome:
         raise CheckFailure("POST /teardown did not return a JSON object")
     if data.get("ok") is not True:
         raise CheckFailure(f"live REA observation failed: {snippet(data.get('reply'))}")
+    ctx.teardown_result = data
     command = data.get("command")
     if command != "analyze-web-bundle":
         raise CheckFailure(f"REA used an unexpected command: {snippet(command)}")
@@ -1110,6 +1112,68 @@ def check_teardown_law(ctx: Context) -> Outcome:
     )
 
 
+def check_teardown_evidence(ctx: Context) -> Outcome:
+    data = ctx.teardown_result
+    if not isinstance(data, dict):
+        raise CheckFailure("the teardown observation did not return a result")
+    evidence = data.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        raise CheckFailure("no labelled evidence lines were returned")
+    sources = set()
+    for line in evidence:
+        if not isinstance(line, dict):
+            raise CheckFailure("an evidence line is not an object")
+        if line.get("source") not in ("REA", "Jarvis"):
+            raise CheckFailure(f"an evidence line has no valid source: {snippet(line)}")
+        sources.add(line["source"])
+    if sources != {"REA", "Jarvis"}:
+        raise CheckFailure(f"evidence is missing a source: {sorted(sources)}")
+    if "REA" not in str(data.get("attribution_note") or "") or "Jarvis" not in str(data.get("attribution_note") or ""):
+        raise CheckFailure("the attribution note does not name REA and Jarvis")
+
+    assets = data.get("asset_log") if isinstance(data.get("asset_log"), dict) else {}
+    if not assets.get("total_files") or not assets.get("total_bytes"):
+        raise CheckFailure("the Jarvis asset log is empty")
+    if len(assets.get("top12") or []) > 12:
+        raise CheckFailure("the asset log kept more than 12 largest files")
+    if "Scripts" not in (assets.get("groups") or {}):
+        raise CheckFailure("the asset log has no Scripts group")
+
+    fingerprints = data.get("fingerprints")
+    if not isinstance(fingerprints, list) or len(fingerprints) < 6:
+        raise CheckFailure("the fingerprint table is incomplete")
+    priorities = [item.get("priority") for item in fingerprints if isinstance(item, dict)]
+    if priorities != [1, 2, 3, 4, 5, 6]:
+        raise CheckFailure(f"fingerprint table is not in designer priority order: {priorities}")
+    categories = [item.get("category") for item in fingerprints if isinstance(item, dict)]
+    expected = ["3D engine", "Animation", "Smooth scroll", "Visual effects", "Compression", "Build tools"]
+    if categories != expected:
+        raise CheckFailure(f"unexpected fingerprint categories: {categories}")
+
+    if not isinstance(data.get("routes"), list):
+        raise CheckFailure("REA returned no routes array")
+    if not isinstance(data.get("load_graph"), list):
+        raise CheckFailure("REA returned no load graph")
+    if not isinstance(data.get("code_signals"), list):
+        raise CheckFailure("REA returned no code signals")
+    if not isinstance(data.get("other_banners"), list):
+        raise CheckFailure("no separate list for other banners")
+    path = str(data.get("screenshot_path") or "")
+    if not path or not Path(path).exists():
+        raise CheckFailure(f"the REA screenshot was not saved: {path}")
+    if Path(path).read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+        raise CheckFailure("the saved screenshot is not a PNG")
+    digest_line = str(data.get("digest_line") or "")
+    if "[REA]" not in digest_line or "[Jarvis]" not in digest_line:
+        raise CheckFailure("the digest does not label REA and Jarvis lines")
+    return Outcome(
+        "pass",
+        f"{len(evidence)} labelled lines · {assets['total_files']} assets · "
+        f"{len(data['routes'])} routes · {len(data['code_signals'])} code signals · "
+        f"PNG saved",
+    )
+
+
 # ---------------------------------------------------------------------------
 # runner
 # ---------------------------------------------------------------------------
@@ -1127,6 +1191,7 @@ CHECKS = [
     ("A ?mute=1 tab is silent", check_mute),
     ("Teardown bay reports ready with pinned REA", check_teardown_diag),
     ("Teardown owns a fresh browser and observes read-only", check_teardown_observe),
+    ("Teardown captures labelled five-step evidence", check_teardown_evidence),
     ("Teardown refuses non-website and interactive targets", check_teardown_law),
 ]
 

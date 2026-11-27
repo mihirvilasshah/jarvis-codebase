@@ -1,20 +1,20 @@
-"""THE BAY - Jarvis-owned Chrome + read-only REA website observation.
+"""THE BAY - Jarvis-owned Chrome + read-only REA website evidence capture.
 
 Standard library only. Soft-imported by server.py, so Jarvis boots without it.
 
-REA never opens a browser itself here: for every teardown we create a brand-new
-profile, launch our own Chrome with loopback CDP, attach REA to that browser,
-observe the page, then terminate Chrome, kill anything still using the profile,
-and delete the folder. Nothing touches the user's everyday Chrome profile.
+Five evidence steps, each labelled with who captured it:
+  REA     - watch while scrolling, read the code, snapshot the page
+  Jarvis  - resource log from our browser, license fingerprints from REA's code
 
-THE LAW: REA observes. It never clicks, types, logs in, or changes anything.
-Only public http(s) websites may be passed to it. Our DevTools client has two
-jobs: Runtime.evaluate for read-only facts, and mouseWheel scrolling.
+REA never launches a browser here: we own a fresh Chrome profile, attach REA to
+it, and always tear it down in a finally block. No clicks, typing, logins, or
+changes; only public http(s) websites.
 """
 
 from __future__ import annotations
 
 import base64
+import collections
 import hashlib
 import ipaddress
 import json
@@ -26,6 +26,7 @@ import socket
 import struct
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -36,6 +37,7 @@ EXPECTED_VERSION = "6.10.1"
 REPO_HINT = "github.com/morluto/rea"
 TOOLS_HOME = Path.home() / ".jarvis-tools" / "rea"
 PROFILES_HOME = TOOLS_HOME / "profiles"
+SNAPSHOTS_HOME = TOOLS_HOME / "snapshots"
 PACKAGE_JSON = TOOLS_HOME / "node_modules" / PACKAGE / "package.json"
 PIN_FILE = TOOLS_HOME / "package.json"
 REA_SCRIPT = TOOLS_HOME / "node_modules" / PACKAGE / "scripts" / "rea.mjs"
@@ -45,17 +47,15 @@ CDP_PORT = 9333
 WINDOW_SIZE = "1280,820"
 INTRO_WAIT_SECONDS = 2.5
 CDP_WAIT_SECONDS = 25.0
+WHEEL_STEPS = 16
+WHEEL_STEP_SECONDS = 0.12
 
-# Commands that attach to an existing loopback CDP browser (never launch one).
 ATTACH_COMMANDS = {"analyze-web-bundle", "inspect-web-page", "capture-web-screenshot", "discover-webmcp-tools"}
 DEFAULT_COMMAND = "analyze-web-bundle"
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-NODE_WINDOWS = [
-    r"C:\Program Files\nodejs\node.exe",
-    r"C:\Program Files (x86)\nodejs\node.exe",
-]
+NODE_WINDOWS = [r"C:\Program Files\nodejs\node.exe", r"C:\Program Files (x86)\nodejs\node.exe"]
 NODE_UNIX = ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/usr/bin/node"]
 CHROME_WINDOWS = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -63,6 +63,11 @@ CHROME_WINDOWS = [
 ]
 CHROME_MAC = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
 CHROME_LINUX = ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"]
+
+ATTRIBUTION_NOTE = (
+    "Every evidence line below is labelled REA (captured by REA) or Jarvis "
+    "(read from our own browser). Keep that attribution straight in any answer."
+)
 
 
 def _snippet(value, limit: int = 180) -> str:
@@ -103,7 +108,6 @@ def find_node() -> tuple[str | None, str | None, bool, str]:
         candidates.append(which)
     candidates.extend(NODE_WINDOWS)
     candidates.extend(NODE_UNIX)
-
     version_dir = Path.home() / ".nvm" / "versions" / "node"
     if version_dir.exists():
         for child in sorted(version_dir.iterdir(), reverse=True):
@@ -127,10 +131,7 @@ def find_node() -> tuple[str | None, str | None, bool, str]:
             continue
         try:
             result = subprocess.run(
-                [str(path), "--version"],
-                capture_output=True,
-                text=True,
-                timeout=10,
+                [str(path), "--version"], capture_output=True, text=True, timeout=10,
                 creationflags=CREATE_NO_WINDOW,
             )
             version = result.stdout.strip() or result.stderr.strip()
@@ -152,9 +153,7 @@ def find_chrome() -> str | None:
     localappdata = os.environ.get("LOCALAPPDATA")
     if localappdata:
         candidates.append(str(Path(localappdata) / "Google" / "Chrome" / "Application" / "chrome.exe"))
-    candidates.append(
-        str(Path.home() / "Applications" / "Google Chrome.app" / "Contents" / "MacOS" / "Google Chrome")
-    )
+    candidates.append(str(Path.home() / "Applications" / "Google Chrome.app" / "Contents" / "MacOS" / "Google Chrome"))
     for candidate in candidates:
         if candidate and Path(candidate).exists():
             return candidate
@@ -176,7 +175,6 @@ def diagnose() -> dict:
     pinned = None
     if isinstance(pin, dict) and isinstance(pin.get("dependencies"), dict):
         pinned = pin["dependencies"].get(PACKAGE)
-
     node_path, node_version, node_ok, node_need = find_node()
     chrome = find_chrome()
     script_ok = REA_SCRIPT.exists()
@@ -207,8 +205,7 @@ def diagnose() -> dict:
         "expected_version": EXPECTED_VERSION,
         "repository": (
             (installed or {}).get("repository", {}).get("url")
-            if isinstance(installed, dict) and isinstance(installed.get("repository"), dict)
-            else None
+            if isinstance(installed, dict) and isinstance(installed.get("repository"), dict) else None
         ),
         "provenance_ok": provenance_ok,
         "node": {"path": node_path, "version": node_version, "ok": node_ok, "need": node_need},
@@ -273,7 +270,7 @@ def validate_website(url) -> tuple[bool, str]:
 
 
 class CDPClient:
-    """Just enough WebSocket for Runtime.evaluate and mouseWheel input."""
+    """Handshake, masked frames, large/fragmented replies, ping and pong."""
 
     def __init__(self, ws_url: str, timeout: float = 30.0):
         parsed = urlparse(ws_url)
@@ -358,7 +355,7 @@ class CDPClient:
         if opcode == 0x8:
             raise RuntimeError("WebSocket close frame received")
         if opcode == 0x9:
-            self.send_frame(0xA, payload)  # pong
+            self.send_frame(0xA, payload)
             return self._frame()
         if opcode == 0xA:
             return self._frame()
@@ -376,7 +373,6 @@ class CDPClient:
                 parts.append(payload)
                 if fin:
                     return b"".join(parts)
-            # other non-control opcodes are ignored
 
     def call(self, method: str, params: dict | None = None) -> dict:
         self.next_id += 1
@@ -394,6 +390,12 @@ class CDPClient:
         result = self.call("Runtime.evaluate", {"expression": expression, "returnByValue": True})
         return result.get("result", {}).get("value")
 
+    def wheel(self, delta_y: int, x: int = 640, y: int = 410) -> None:
+        self.call(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": delta_y, "pointerType": "mouse"},
+        )
+
     def close(self) -> None:
         if self.sock is not None:
             try:
@@ -408,7 +410,7 @@ class CDPClient:
 
 
 # ---------------------------------------------------------------------------
-# browser lifecycle helpers
+# browser lifecycle
 # ---------------------------------------------------------------------------
 
 
@@ -444,7 +446,6 @@ def _host_matches(page_url: str, target_url: str) -> bool:
 
 
 def _profile_pids(marker: str) -> list[int]:
-    """Find processes whose command line contains the unique profile marker."""
     if sys.platform == "win32":
         safe = marker.replace("'", "''")
         script = (
@@ -454,19 +455,14 @@ def _profile_pids(marker: str) -> list[int]:
         )
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", script],
-                capture_output=True,
-                text=True,
-                timeout=20,
-                creationflags=CREATE_NO_WINDOW,
+                ["powershell", "-NoProfile", "-Command", script], capture_output=True,
+                text=True, timeout=20, creationflags=CREATE_NO_WINDOW,
             )
             return [int(line) for line in result.stdout.splitlines() if line.strip().isdigit()]
         except Exception:
             return []
     try:
-        result = subprocess.run(
-            ["ps", "-eo", "pid=,args="], capture_output=True, text=True, timeout=20
-        )
+        result = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True, timeout=20)
         pids = []
         for line in result.stdout.splitlines():
             if marker in line and ("chrome" in line.lower() or "chromium" in line.lower()):
@@ -484,21 +480,19 @@ def _kill_pids(pids: list[int]) -> None:
             if sys.platform == "win32":
                 subprocess.run(
                     ["powershell", "-NoProfile", "-Command", f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue"],
-                    capture_output=True,
-                    timeout=15,
-                    creationflags=CREATE_NO_WINDOW,
+                    capture_output=True, timeout=15, creationflags=CREATE_NO_WINDOW,
                 )
             else:
                 os.kill(pid, 15)
         except Exception:
             pass
     time.sleep(0.6)
-    for pid in pids:
-        try:
-            if sys.platform != "win32":
+    if sys.platform != "win32":
+        for pid in pids:
+            try:
                 os.kill(pid, 9)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
 
 def _remove_profile(profile: Path) -> bool:
@@ -513,16 +507,261 @@ def _remove_profile(profile: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# REA and evidence helpers
+# ---------------------------------------------------------------------------
+
+
+def _run_rea(node: str, args: list[str], timeout: int = 240) -> dict:
+    completed = subprocess.run(
+        [node, str(REA_SCRIPT), *args, "--json"],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+        creationflags=CREATE_NO_WINDOW,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"REA {args[0]} failed: {_snippet(completed.stderr or completed.stdout, 200)}")
+    try:
+        return json.loads(completed.stdout)
+    except Exception:
+        return {"raw": completed.stdout[:2000]}
+
+
+def _walk(obj):
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            yield key, value
+            yield from _walk(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            yield from _walk(value)
+
+
+def _strings(obj) -> list[str]:
+    found: list[str] = []
+    for _, value in _walk(obj):
+        if isinstance(value, str) and value:
+            found.append(value)
+    return found
+
+
+def _rea_targets(data, url: str) -> list[str]:
+    ids: list[str] = []
+    for key, value in _walk(data):
+        if isinstance(value, dict):
+            candidate_id = value.get("id") or value.get("targetId")
+            candidate_url = value.get("url") or value.get("targetUrl")
+            if isinstance(candidate_id, str) and isinstance(candidate_url, str) and _host_matches(candidate_url, url):
+                ids.append(candidate_id)
+    return list(dict.fromkeys(ids))
+
+
+def _extract_routes(data) -> list[str]:
+    keys = {"routes", "route", "paths", "endpoints", "javascript_routes"}
+    routes: list[str] = []
+    for key, value in _walk(data):
+        if key.lower() in keys:
+            if isinstance(value, str) and value:
+                routes.append(value)
+            elif isinstance(value, list):
+                for item in value[:50]:
+                    if isinstance(item, str):
+                        routes.append(item)
+                    elif isinstance(item, dict):
+                        for inner in ("path", "route", "url", "endpoint"):
+                            if isinstance(item.get(inner), str):
+                                routes.append(item[inner])
+            elif isinstance(value, dict):
+                for inner in ("path", "route", "url", "endpoint"):
+                    if isinstance(value.get(inner), str):
+                        routes.append(value[inner])
+    return list(dict.fromkeys(route for route in routes if route and len(route) < 300))[:25]
+
+
+def _extract_load_graph(data) -> list[str]:
+    """Map REA's script-key graph to readable 'file -> import' lines."""
+    names: dict[str, str] = {}
+    pairs: list[str] = []
+    for key, value in _walk(data):
+        if key == "nodes" and isinstance(value, list):
+            for node in value:
+                if isinstance(node, dict) and isinstance(node.get("script_key"), str):
+                    url = node.get("url") or node.get("path") or node.get("key")
+                    if isinstance(url, str):
+                        names[node["script_key"]] = url
+        if key == "edges" and isinstance(value, list):
+            for edge in value:
+                if not isinstance(edge, dict):
+                    continue
+                source = names.get(edge.get("from_script_key", ""), str(edge.get("from_script_key", ""))[:12])
+                target = edge.get("resolved_url") or edge.get("specifier") or edge.get("to_script_key")
+                if isinstance(target, str) and target:
+                    pairs.append(f"{_snippet(source, 90)} -> {_snippet(target, 90)}")
+    return list(dict.fromkeys(pairs))[:25]
+
+
+SIGNAL_RE = re.compile(
+    r"\b[A-Za-z_][A-Za-z0-9_]*(?:Buffer|Map|Pass|Shader|Uniform|Texture|CoC|DOF|Bloom|SSAO|FXAA|SMAA|ToneMapping|PMREM)\b"
+    r"|\b(?:gl_FragColor|texture2D|depthTexture|nearCoCBuffer|envMap|normalMap)\b"
+)
+
+
+def _code_signals(strings: list[str]) -> list[dict]:
+    counts: collections.Counter = collections.Counter()
+    for text in strings:
+        if len(text) > 2_000_000:
+            text = text[:2_000_000]
+        for match in SIGNAL_RE.findall(text):
+            counts[match] += 1
+    return [{"signal": name, "count": count} for name, count in counts.most_common(20)]
+
+
+FINGERPRINT_PATTERNS = [
+    ("3D engine", re.compile(r"Three\.js Authors.{0,400}?(?:REVISION\s*=\s*['\"]?(\d{2,4})|\br(\d{2,4})\b)", re.S | re.I)),
+    ("Animation", re.compile(r"(?i)gsap\s*3\.(\d+)\.(\d+)(?:\.(\d+))?")),
+    ("Smooth scroll", re.compile(r"(?i)(lenis|scrollsmoother|locomotive-?scroll|smooth-?scrollbar)")),
+    ("Visual effects", re.compile(r"(?i)postprocessing\s*v?(\d+)\.(\d+)")),
+    ("Compression", re.compile(r"(?i)(KTX2Loader|DRACOLoader|MeshoptDecoder|BasisUniversal|\bktx2\b)")),
+    ("Build tools", re.compile(r"(?i)(__webpack_require__|\bvite\b|\brollup\b|\besbuild\b)")),
+]
+
+
+def _fingerprints(strings: list[str]) -> list[dict]:
+    table: list[dict] = []
+    for priority, (category, pattern) in enumerate(FINGERPRINT_PATTERNS, start=1):
+        version = ""
+        match = None
+        for text in strings:
+            if len(text) > 2_000_000:
+                text = text[:2_000_000]
+            match = pattern.search(text)
+            if match:
+                groups = [group for group in match.groups() if group]
+                version = ".".join(groups) if category in ("Animation", "Visual effects", "3D engine") else (groups[0] if groups else "")
+                if category == "3D engine" and version and not version.startswith("r"):
+                    version = "r" + version
+                if category == "Visual effects" and version:
+                    version = "v" + version
+                break
+        table.append(
+            {
+                "priority": priority,
+                "category": category,
+                "found": bool(match),
+                "version": version,
+                "match": _snippet(match.group(0), 140) if match else "",
+            }
+        )
+    return table
+
+
+def _other_banners(strings: list[str]) -> list[str]:
+    banners: list[str] = []
+    known = ("three.js authors", "gsap", "postprocessing")
+    for text in strings[:5000]:
+        head = text[:260]
+        if not re.search(r"(?i)(copyright|©|\bMIT\b|\bApache\b|\bGPL\b|\bBSD\b|license)", head):
+            continue
+        if any(item in head.lower() for item in known):
+            continue
+        banner = _snippet(head, 160)
+        if banner not in banners:
+            banners.append(banner)
+        if len(banners) >= 10:
+            break
+    return banners
+
+
+KIND_EXTENSIONS = [
+    ("3D models", (".glb", ".gltf", ".obj", ".fbx", ".usdz", ".blend", ".stl", ".ply", ".splat", ".3ds", ".dae")),
+    ("Compressed textures", (".ktx2", ".ktx", ".basis", ".astc", ".dds", ".etc", ".pvr")),
+    ("Video", (".mp4", ".webm", ".mov", ".m4v", ".ogv")),
+    ("Audio", (".mp3", ".ogg", ".wav", ".m4a", ".aac", ".flac")),
+    ("Fonts", (".woff2", ".woff", ".ttf", ".otf", ".eot")),
+    ("WebAssembly", (".wasm",)),
+    ("Scripts", (".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx")),
+]
+
+
+def _classify_asset(name: str, initiator: str) -> str:
+    path = name.split("?", 1)[0].split("#", 1)[0].lower()
+    for kind, extensions in KIND_EXTENSIONS:
+        if path.endswith(extensions):
+            return kind
+    if initiator == "script":
+        return "Scripts"
+    return "Other"
+
+
+def _asset_log(entries) -> dict:
+    if not isinstance(entries, list):
+        entries = []
+    files: list[dict] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "")
+        if not name:
+            continue
+        size = int(entry.get("transferSize") or entry.get("decodedBodySize") or entry.get("encodedBodySize") or 0)
+        files.append(
+            {
+                "name": name,
+                "origin": urlparse(name).netloc,
+                "kind": _classify_asset(name, str(entry.get("initiatorType") or "")),
+                "size": size,
+                "transfer_size": int(entry.get("transferSize") or 0),
+                "encoded_size": int(entry.get("encodedBodySize") or 0),
+                "decoded_size": int(entry.get("decodedBodySize") or 0),
+                "initiator": str(entry.get("initiatorType") or ""),
+                "duration_ms": round(float(entry.get("duration") or 0), 1),
+            }
+        )
+    groups: dict[str, dict] = {}
+    for item in files:
+        group = groups.setdefault(item["kind"], {"files": 0, "bytes": 0})
+        group["files"] += 1
+        group["bytes"] += item["size"]
+    top = sorted(files, key=lambda item: item["size"], reverse=True)[:12]
+    return {
+        "total_files": len(files),
+        "total_bytes": sum(item["size"] for item in files),
+        "origins": sorted({item["origin"] for item in files if item["origin"]}),
+        "groups": groups,
+        "top12": top,
+        "files": files[:500],
+    }
+
+
+def _decode_snapshot(data, destination: Path) -> bool:
+    for text in _strings(data):
+        if len(text) < 1000 or len(text) > 60_000_000:
+            continue
+        candidate = re.sub(r"\s+", "", text)
+        if not re.fullmatch(r"[A-Za-z0-9+/=]+", candidate):
+            continue
+        try:
+            raw = base64.b64decode(candidate)
+        except Exception:
+            continue
+        if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # the teardown
 # ---------------------------------------------------------------------------
 
 
 def run_teardown(url, command=None, headless: bool = False) -> dict:
-    """Observe one public website with REA attached to our own fresh Chrome."""
+    """Capture five labelled evidence streams attached to our own fresh Chrome."""
     diag = diagnose()
     if not diag["ready"]:
         return {"ok": False, "reply": missing_line(diag), "diagnostics": diag}
-
     allowed, reason = validate_website(url)
     if not allowed:
         return {
@@ -530,7 +769,6 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
             "reply": f"I'm afraid that is not a website I may look at, sir. {reason} Nothing was touched.",
             "diagnostics": diag,
         }
-
     chosen = str(command or DEFAULT_COMMAND).strip()
     if chosen not in ATTACH_COMMANDS:
         return {
@@ -539,14 +777,11 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
             "diagnostics": diag,
         }
     if not _port_free(CDP_PORT):
-        return {
-            "ok": False,
-            "reply": f"Loopback port {CDP_PORT} is busy, sir. Nothing was touched.",
-            "diagnostics": diag,
-        }
+        return {"ok": False, "reply": f"Loopback port {CDP_PORT} is busy, sir. Nothing was touched.", "diagnostics": diag}
 
     job_id = secrets.token_hex(8)
     profile = PROFILES_HOME / job_id
+    snapshot_path = SNAPSHOTS_HOME / (job_id + ".png")
     try:
         profile.mkdir(parents=True, exist_ok=False)
     except Exception as exc:
@@ -554,15 +789,11 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
 
     chrome = diag["chrome"]["path"]
     node = diag["node"]["path"]
+    endpoint = f"http://{CDP_HOST}:{CDP_PORT}"
     args = [
-        chrome,
-        f"--user-data-dir={profile}",
-        f"--remote-debugging-port={CDP_PORT}",
-        f"--remote-debugging-address={CDP_HOST}",
-        "--no-first-run",
-        "--no-default-browser-check",
-        "--disable-extensions",
-        f"--window-size={WINDOW_SIZE}",
+        chrome, f"--user-data-dir={profile}", f"--remote-debugging-port={CDP_PORT}",
+        f"--remote-debugging-address={CDP_HOST}", "--no-first-run", "--no-default-browser-check",
+        "--disable-extensions", f"--window-size={WINDOW_SIZE}",
     ]
     if headless:
         args.append("--headless=new")
@@ -571,48 +802,52 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
     proc = None
     client: CDPClient | None = None
     started = time.monotonic()
-    result: dict = {"ok": False, "diagnostics": diag, "job_id": job_id, "headless": bool(headless)}
+    result: dict = {
+        "ok": False, "diagnostics": diag, "job_id": job_id, "headless": bool(headless),
+        "attribution_note": ATTRIBUTION_NOTE, "evidence": [],
+    }
+
+    def evidence(source: str, step: str, tool: str, payload, summary: str = "") -> None:
+        result["evidence"].append(
+            {"source": source, "step": step, "tool": tool, "summary": summary, "data": payload}
+        )
 
     try:
         proc = subprocess.Popen(
-            args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=CREATE_NO_WINDOW,
+            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW
         )
-
         deadline = time.monotonic() + CDP_WAIT_SECONDS
         version = None
         while time.monotonic() < deadline:
-            version = _http_json(f"http://{CDP_HOST}:{CDP_PORT}/json/version", timeout=1.0)
+            version = _http_json(endpoint + "/json/version", timeout=1.0)
             if isinstance(version, dict):
                 break
             time.sleep(0.25)
         if not isinstance(version, dict):
             raise RuntimeError("Chrome's DevTools endpoint did not answer within 25 seconds")
 
-        target = None
+        cdp_targets = None
         while time.monotonic() < deadline:
-            targets = _http_json(f"http://{CDP_HOST}:{CDP_PORT}/json/list", timeout=1.0)
-            if isinstance(targets, list):
-                target = next(
-                    (
-                        item
-                        for item in targets
-                        if isinstance(item, dict)
-                        and item.get("type") == "page"
-                        and str(item.get("url", "")).startswith(("http://", "https://"))
-                        and _host_matches(str(item.get("url", "")), url)
-                    ),
-                    None,
-                )
-                if target:
-                    break
+            cdp_targets = _http_json(endpoint + "/json/list", timeout=1.0)
+            if isinstance(cdp_targets, list) and any(
+                isinstance(item, dict) and item.get("type") == "page"
+                and str(item.get("url", "")).startswith(("http://", "https://"))
+                and _host_matches(str(item.get("url", "")), url) for item in cdp_targets
+            ):
+                break
             time.sleep(0.25)
-        if not target:
+        cdp_target = next(
+            (
+                item for item in (cdp_targets or [])
+                if isinstance(item, dict) and item.get("type") == "page"
+                and str(item.get("url", "")).startswith(("http://", "https://"))
+                and _host_matches(str(item.get("url", "")), url)
+            ),
+            None,
+        )
+        if not cdp_target:
             raise RuntimeError("No Chrome page target for that website was found")
-
-        client = CDPClient(str(target["webSocketDebuggerUrl"]), timeout=CDP_WAIT_SECONDS).connect()
+        client = CDPClient(str(cdp_target["webSocketDebuggerUrl"]), timeout=CDP_WAIT_SECONDS).connect()
 
         ready_at = None
         while time.monotonic() < deadline:
@@ -624,50 +859,118 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
             raise RuntimeError("The page did not finish loading within 25 seconds")
         load_seconds = round(ready_at - started, 2)
         time.sleep(INTRO_WAIT_SECONDS)
-
         title = str(client.evaluate("document.title") or "")
         href = str(client.evaluate("location.href") or "")
 
+        # Target id must come from REA's own target listing.
+        listing = _run_rea(node, ["list-browser-targets", endpoint], timeout=60)
+        rea_ids = _rea_targets(listing, url)
+        target_id = rea_ids[0] if rea_ids else str(cdp_target["id"])
+        evidence("REA", "target", "list-browser-targets", {"target_ids": rea_ids, "used": target_id},
+                 f"target {target_id[:12]}…")
+
+        # 1. WATCH WHILE SCROLLING
+        watch_holder: dict = {}
+
+        def watch() -> None:
+            try:
+                watch_holder["data"] = _run_rea(
+                    node,
+                    [
+                        "inspect-web-page", endpoint, target_id,
+                        "--observation-ms", "7000", "--include-script-sources",
+                    ],
+                    timeout=120,
+                )
+            except Exception as exc:
+                watch_holder["error"] = str(exc)
+
+        watcher = threading.Thread(target=watch, name="rea-watch", daemon=True)
+        watcher.start()
+        time.sleep(1.0)
         before_scroll = client.evaluate("window.scrollY || 0")
-        for step in range(3):
-            client.call(
-                "Input.dispatchMouseEvent",
-                {
-                    "type": "mouseWheel",
-                    "x": 640,
-                    "y": 410,
-                    "deltaX": 0,
-                    "deltaY": 600,
-                    "pointerType": "mouse",
-                },
-            )
-            time.sleep(0.25)
+        for _ in range(WHEEL_STEPS):
+            client.wheel(600)
+            time.sleep(WHEEL_STEP_SECONDS)
         after_scroll = client.evaluate("window.scrollY || 0")
-        client.close()
-        client = None
+        watcher.join(timeout=120)
+        if "error" in watch_holder:
+            raise RuntimeError(f"inspect-web-page failed: {_snippet(watch_holder['error'])}")
+        watch_data = watch_holder.get("data", {})
+        evidence("REA", "watch", "inspect-web-page", watch_data,
+                 f"observed {WHEEL_STEPS} wheel steps for 7000ms with script sources")
+        evidence("Jarvis", "scroll", "Input.dispatchMouseEvent",
+                 {"before": before_scroll, "after": after_scroll, "steps": WHEEL_STEPS},
+                 f"wheel scroll {before_scroll} -> {after_scroll}")
 
-        rea_argv = [
-            node,
-            str(REA_SCRIPT),
-            chosen,
-            f"http://{CDP_HOST}:{CDP_PORT}",
-            str(target["id"]),
-            "--json",
-        ]
-        completed = subprocess.run(
-            rea_argv,
-            capture_output=True,
-            text=True,
-            timeout=240,
-            creationflags=CREATE_NO_WINDOW,
+        # 2. READ THE CODE
+        bundle = _run_rea(node, ["analyze-web-bundle", endpoint, target_id], timeout=240)
+        strings = _strings(watch_data) + _strings(bundle)
+        routes = _extract_routes(bundle)
+        load_graph = _extract_load_graph(bundle)
+        code_signals = _code_signals(strings)
+        evidence("REA", "code", "analyze-web-bundle", bundle,
+                 f"{len(routes)} routes, {len(load_graph)} load links, {len(code_signals)} code signals")
+        evidence("REA", "routes", "analyze-web-bundle", routes, f"{len(routes)} routes")
+        evidence("REA", "load-graph", "analyze-web-bundle", load_graph, f"{len(load_graph)} file links")
+        evidence("REA", "code-signals", "analyze-web-bundle", code_signals,
+                 "shader/uniform strings handed to the graphics card")
+
+        # 3. SNAPSHOT: wheel back to the top, then capture.
+        for _ in range(WHEEL_STEPS + 8):
+            client.wheel(-900)
+            time.sleep(0.05)
+        top = client.evaluate("window.scrollY || 0")
+        screenshot = _run_rea(node, ["capture-web-screenshot", endpoint, target_id], timeout=120)
+        png_saved = _decode_snapshot(screenshot, snapshot_path)
+        evidence("Jarvis", "scroll-top", "Input.dispatchMouseEvent", {"scrollY": top}, "wheeled back to top")
+        evidence("REA", "snapshot", "capture-web-screenshot",
+                 {"saved": png_saved, "path": str(snapshot_path), "bytes": snapshot_path.stat().st_size if png_saved else 0},
+                 f"PNG saved: {png_saved}")
+
+        # 4. ASSET LOG - Jarvis's own browser reads.
+        entries = client.evaluate(
+            "performance.getEntriesByType('resource').map(e => ({name:e.name,transferSize:e.transferSize,"
+            "encodedBodySize:e.encodedBodySize,decodedBodySize:e.decodedBodySize,"
+            "initiatorType:e.initiatorType,duration:e.duration}))"
         )
-        if completed.returncode != 0:
-            raise RuntimeError(f"REA failed: {_snippet(completed.stderr or completed.stdout, 200)}")
-        try:
-            evidence = json.loads(completed.stdout)
-        except Exception:
-            evidence = {"raw": completed.stdout[:2000]}
+        assets = _asset_log(entries)
+        evidence("Jarvis", "asset-log", "performance.getEntriesByType",
+                 assets, f"{assets['total_files']} files, {assets['total_bytes']} bytes, {len(assets['top12'])} largest")
 
+        # 5. FINGERPRINTS - Jarvis reads REA's captured code.
+        fingerprints = _fingerprints(strings)
+        other_banners = _other_banners(strings)
+        evidence("Jarvis", "fingerprints", "REA code strings",
+                 {"table": fingerprints, "other_banners": other_banners},
+                 "license banners in designer priority order")
+
+        script_files = sorted(
+            (item for item in assets["files"] if item["kind"] == "Scripts"),
+            key=lambda item: item["size"],
+            reverse=True,
+        )[:6]
+        stack = [
+            f"{item['category']} {item['version']}".strip()
+            for item in fingerprints if item["found"]
+        ]
+        if other_banners:
+            stack.append("other: " + "; ".join(_snippet(item, 60) for item in other_banners[:2]))
+        digest_parts = [
+            "[Jarvis] scripts: "
+            + ("; ".join(f"{item['name'].split('/')[-1][:32]} {item['size']:,}B" for item in script_files)
+               if script_files else "none logged"),
+            "[REA] routes: "
+            + (", ".join(routes[:8]) if routes else "0 declared"),
+            "[REA] loads: "
+            + ("; ".join(load_graph[:4]) if load_graph else "none reported"),
+            "[REA] code signals: "
+            + (", ".join(f"{item['signal']} ({item['count']})" for item in code_signals[:5])
+               if code_signals else "none"),
+            "[REA] stack: " + (", ".join(stack) if stack else "no known banners"),
+            f"[Jarvis] assets: {assets['total_files']} files, {assets['total_bytes']:,} bytes "
+            f"from {len(assets['origins'])} origin(s); screenshot {str(snapshot_path) if png_saved else 'not saved'}",
+        ]
         result.update(
             {
                 "ok": True,
@@ -677,12 +980,22 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
                 "title": title,
                 "load_seconds": load_seconds,
                 "intro_wait_seconds": INTRO_WAIT_SECONDS,
-                "scroll": {"before": before_scroll, "after": after_scroll},
+                "scroll": {"before": before_scroll, "after": after_scroll, "top": top, "steps": WHEEL_STEPS},
                 "command": chosen,
-                "cdp_endpoint": f"http://{CDP_HOST}:{CDP_PORT}",
-                "target_id": str(target["id"]),
+                "cdp_endpoint": endpoint,
+                "target_id": target_id,
                 "browser_version": str(version.get("Browser", "")),
-                "data": evidence,
+                "data": bundle,
+                "routes": routes,
+                "load_graph": load_graph,
+                "code_signals": code_signals,
+                "asset_log": assets,
+                "fingerprints": fingerprints,
+                "other_banners": other_banners,
+                "screenshot_path": str(snapshot_path) if png_saved else "",
+                "screenshot_saved": png_saved,
+                "digest": "\n".join(digest_parts),
+                "digest_line": ATTRIBUTION_NOTE + " " + " ".join(digest_parts),
             }
         )
     except Exception as exc:
@@ -708,24 +1021,27 @@ def run_teardown(url, command=None, headless: bool = False) -> dict:
 
 
 def main() -> int:
-    parser = __import__("argparse").ArgumentParser(description="Own the browser and observe a public website with REA.")
-    parser.add_argument("--url", required=True, help="public http(s) website")
+    parser = __import__("argparse").ArgumentParser(description="Own the browser and capture labelled REA + Jarvis evidence.")
+    parser.add_argument("--url", required=True, help="public http(s) website, preferably a 3D site")
     parser.add_argument("--headless", action="store_true", help="run Chrome with no window")
     parser.add_argument("--command", default=DEFAULT_COMMAND, help="attach-only REA command")
     args = parser.parse_args()
-
     result = run_teardown(args.url, command=args.command, headless=args.headless)
+
     print(f"Job: {result.get('job_id')}")
     print(f"Headless: {result.get('headless')}")
     print(f"Title: {result.get('title') or '(none)'}")
     print(f"Loaded in: {result.get('load_seconds')}s (+{result.get('intro_wait_seconds')}s intro wait)")
     print(f"Scroll: {result.get('scroll')}")
+    print(f"Screenshot: {result.get('screenshot_path') or 'not saved'}")
     print(f"Chrome closed: {result.get('chrome_closed')}")
     print(f"Remaining processes: {result.get('remaining_processes')}")
     print(f"Profile removed: {result.get('profile_cleaned')}")
-    print(f"REA: {result.get('reply')}")
-    if result.get("data", {}).get("evidence_id"):
-        print(f"Evidence: {result['data']['evidence_id']}")
+    print("--- evidence digest ---")
+    print(result.get("digest") or result.get("reply"))
+    print("--- labelled evidence ---")
+    for item in result.get("evidence", []):
+        print(f"[{item['source']}] {item['step']}: {item['summary']}")
     return 0 if result.get("ok") else 1
 
 

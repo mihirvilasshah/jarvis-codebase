@@ -189,23 +189,37 @@ npm install rea-agents@6.10.1 --save-exact --ignore-scripts
 if it is absent. `GET /teardown/diag` reports readiness, installed and pinned
 versions, Node version, Chrome discovery, and plain-English problems.
 
-REA never opens a browser itself. Each `POST /teardown` with
-`{"url": "https://...", "headless": false}` (or the chat tag
-`[TEARDOWN:https://...]`) creates a brand-new profile under
+REA never opens a browser itself. Each `POST /teardown` with `{"url": "https://...", "headless": false}` (or the
+chat tag `[TEARDOWN:https://...]`) creates a brand-new profile under
 `~/.jarvis-tools/rea/profiles/JOB_ID`, launches **our own** Chrome with
 `--user-data-dir`, loopback `--remote-debugging-port=9333`, no first run, no
 default-browser check, extensions off, and a 1280×820 window. It polls the CDP
-endpoint for up to 25 s, finds the page target for the site's host (www and
-redirects allowed), waits for `document.readyState === "complete"` plus 2.5 s
-for the intro, then attaches REA with `analyze-web-bundle` on that endpoint and
-target id. A tiny standard-library WebSocket client reads page facts and sends
-`mouseWheel` input — never `scrollTo`, so smooth-scroll libraries behave. A
-`finally` block terminates Chrome, kills anything still holding that profile,
-and deletes the folder. `headless: true` runs the same browser with no window.
+endpoint for up to 25 s, finds the page target with `rea list-browser-targets`
+(www and redirects allowed), waits for `document.readyState === "complete"`
+plus 2.5 s, and then captures five labelled evidence streams:
+
+1. **REA** watches with `inspect-web-page --observation-ms 7000
+   --include-script-sources` while Jarvis sends 16 `mouseWheel` events.
+2. **REA** reads the code with `analyze-web-bundle` (load graph, routes, shader
+   and uniform strings such as `nearCoCBuffer`).
+3. **REA** captures a screenshot after Jarvis wheels back to the top; the PNG is
+   decoded and saved under `~/.jarvis-tools/rea/snapshots/`.
+4. **Jarvis** reads `performance.getEntriesByType('resource')` from our own
+   browser: every file, every origin, grouped by kind, keeping the 12 largest.
+5. **Jarvis** fingerprints licence banners in REA's captured code, in designer
+   priority order: 3D engine, animation, smooth scroll, visual effects,
+   compression, build tools. Other banners are listed separately.
+
+A tiny standard-library WebSocket client handles handshake, masked frames,
+large/fragmented replies, ping and pong; it only does `Runtime.evaluate` and
+`Input.dispatchMouseEvent`. Every evidence line is labelled `REA` or `Jarvis`,
+and the brain is told to keep that attribution straight. A `finally` block
+terminates Chrome, kills anything still holding that profile, and deletes the
+folder. `headless: true` runs the same browser with no window.
 
 Direct headless verification:
 ```powershell
-python teardown.py --url https://example.com --headless
+python teardown.py --url https://threejs.org/examples/webgl_loader_gltf.html --headless
 ```
 
 **The law:** REA observes only. No clicks, typing, logins, or changes; only
