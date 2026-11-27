@@ -2358,6 +2358,12 @@
       }
     }
 
+    // Preflight hook: lets preflight.py call the real speak() in a real tab.
+    // Only exposed with ?debug=1, like the graph handle.
+    if (new URLSearchParams(location.search).has('debug')) {
+      window.__kgSpeak = speak;
+    }
+
     function cancelSpeech() {
       pendingSpeech = '';
       // Leave the silent warm-up alone: it is what unlocks audio on the very

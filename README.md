@@ -168,6 +168,29 @@ Deployment checks already performed:
   points at localhost; no key or internal detail leaks.
 - `/config.json` returns 404 on both local and Vercel; no key literal appears in HTML/JS.
 
+## Preflight (live end-to-end check)
+
+Run this before calling any change done:
+
+```powershell
+python build.py
+python server.py          # in another terminal, and leave it running
+python preflight.py
+```
+
+`preflight.py` makes real calls to the running server and the FreeLLMAPI gateway;
+it uses no mocks and no unit tests. In order it verifies the viewer is served,
+the graph loads, `/chat` answers with a real node list, the API key is accepted,
+the configured model id is reachable through the Models API, `/remember` writes
+a note that `/chat` retrieves immediately (then deletes it, rebuilds the graph
+and calls `POST /reindex`), served files are byte-identical to the files on
+disk, `config.json` is unreachable even through encoded traversal, and a real
+headless tab with `?mute=1` never reaches speech synthesis.
+
+It finishes with a line like `9 pass, 0 fail, 0 warn` and exits non-zero on any
+failure. The mute check needs Chrome or Edge and the optional `websockets`
+package; without them it prints a warning instead of failing.
+
 > Note: `vercel curl` was used once for verification and added a Deployment Protection
 > automation bypass secret to the project. Revoke it under **Project Settings →
 > Deployment Protection → Automation Bypass** if you do not need it.
@@ -184,6 +207,7 @@ viewer/graph.json      generated server-side graph data
 brain.py               config, retrieval, prompt, FreeLLMAPI, history
 build.py               standard-library indexer
 server.py              local 127.0.0.1:4700 server
+preflight.py           live end-to-end harness (exit non-zero on failure)
 config.example.json    config template (safe to commit)
 config.json            your local secrets (gitignored)
 vercel.json            build, output, function, headers

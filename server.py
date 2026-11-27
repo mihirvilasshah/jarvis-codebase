@@ -17,7 +17,7 @@ import traceback
 import unicodedata
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import brain
 import build
@@ -365,7 +365,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_OPTIONS(self) -> None:
-        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember"):
+        if urlparse(self.path).path not in ("/chat", "/api/chat", "/remember", "/reindex"):
             self.send_error(404)
             return
         self.send_response(204)
@@ -387,14 +387,21 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/":
             self.path = "/index.html"
-        if ".." in path or path.startswith("/config"):
+        # Decode and normalise before the safety check so encoded traversal
+        # (including Windows backslashes) cannot reach files outside viewer/.
+        decoded = unquote(unquote(path)).replace("\\", "/")
+        if (
+            ".." in decoded.split("/")
+            or decoded.lower().startswith("/config")
+            or "\x00" in decoded
+        ):
             self._json(404, {"error": "Not found"})
             return
         super().do_GET()
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path not in ("/chat", "/api/chat", "/remember"):
+        if path not in ("/chat", "/api/chat", "/remember", "/reindex"):
             self._json(404, {"error": "Not found", "nodes": []})
             return
 
@@ -429,6 +436,17 @@ class Handler(SimpleHTTPRequestHandler):
                 400,
                 {"error": "The request body must be a JSON object.", "code": "invalid_request", "nodes": []},
             )
+            return
+
+        if path == "/reindex":
+            try:
+                notes = brain.reload_graph()
+                self._json(200, {"ok": True, "notes": len(notes)})
+            except brain.BrainError as exc:
+                self._json(exc.status, {"ok": False, "error": exc.message, "code": exc.code})
+            except Exception:
+                traceback.print_exc()
+                self._json(500, {"ok": False, "error": "Re-index failed.", "code": "server_error"})
             return
 
         if path == "/remember":
